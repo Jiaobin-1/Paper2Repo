@@ -47,6 +47,40 @@ REPORT_DIR=./storage/reports
 
 当前 MVP 已接入 OpenAI-compatible 结构化输出入口。配置 `OPENAI_API_KEY` 后，核心分析节点会优先调用 LLM 生成符合 Pydantic schema 的 JSON；未配置时会使用基于检索片段的本地 fallback，保证流程仍可跑通。
 
+### 接入自己的 OpenAI-compatible LLM
+
+在项目根目录创建 `.env`，不要放到 `backend/` 里面：
+
+```bash
+cp .env.example .env
+```
+
+填写你的服务商配置：
+
+```bash
+OPENAI_API_KEY=你的 API Key
+OPENAI_BASE_URL=https://你的服务商地址/v1
+OPENAI_MODEL=你的模型名
+```
+
+示例：
+
+```bash
+# Example only. Use the exact base URL and model name from your provider.
+OPENAI_API_KEY=sk-xxx
+OPENAI_BASE_URL=https://api.example.com/v1
+OPENAI_MODEL=deepseek-chat
+```
+
+修改 `.env` 后需要重启后端，因为配置会在应用启动时读取：
+
+```bash
+cd backend
+conda run -n agent-learning python -m uvicorn app.main:app --reload
+```
+
+如果你的服务商兼容 OpenAI Chat Completions，Paper2Repo 会通过 `OPENAI_BASE_URL`、`OPENAI_API_KEY`、`OPENAI_MODEL` 调用它。
+
 ## API
 
 - `GET /health`
