@@ -61,6 +61,8 @@ def init_db() -> None:
                 id TEXT PRIMARY KEY,
                 paper_id TEXT NOT NULL,
                 status TEXT NOT NULL,
+                current_step TEXT,
+                progress_percent INTEGER NOT NULL DEFAULT 0,
                 error_message TEXT,
                 started_at TEXT,
                 completed_at TEXT,
@@ -96,6 +98,15 @@ def init_db() -> None:
             );
             """
         )
+        _ensure_analysis_run_columns(conn)
+
+
+def _ensure_analysis_run_columns(conn: sqlite3.Connection) -> None:
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(analysis_runs)").fetchall()}
+    if "current_step" not in columns:
+        conn.execute("ALTER TABLE analysis_runs ADD COLUMN current_step TEXT")
+    if "progress_percent" not in columns:
+        conn.execute("ALTER TABLE analysis_runs ADD COLUMN progress_percent INTEGER NOT NULL DEFAULT 0")
 
 
 def create_paper(filename: str, file_path: Path, file_size: int, title: str | None = None) -> dict[str, Any]:
@@ -135,24 +146,40 @@ def create_run(paper_id: str) -> dict[str, Any]:
     with get_connection() as conn:
         conn.execute(
             """
-            INSERT INTO analysis_runs (id, paper_id, status, started_at, created_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO analysis_runs (
+                id, paper_id, status, current_step, progress_percent,
+                started_at, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (run_id, paper_id, "pending", now, now),
+            (run_id, paper_id, "pending", "queued", 0, now, now),
         )
     return get_run(run_id)
 
 
-def update_run_status(run_id: str, status: str, error_message: str | None = None, completed: bool = False) -> None:
+def update_run_status(
+    run_id: str,
+    status: str,
+    error_message: str | None = None,
+    completed: bool = False,
+    current_step: str | None = None,
+    progress_percent: int | None = None,
+) -> None:
     completed_at = utc_now() if completed else None
+    if progress_percent is not None:
+        progress_percent = max(0, min(100, progress_percent))
     with get_connection() as conn:
         conn.execute(
             """
             UPDATE analysis_runs
-            SET status = ?, error_message = ?, completed_at = COALESCE(?, completed_at)
+            SET status = ?,
+                error_message = ?,
+                current_step = COALESCE(?, current_step),
+                progress_percent = COALESCE(?, progress_percent),
+                completed_at = COALESCE(?, completed_at)
             WHERE id = ?
             """,
-            (status, error_message, completed_at, run_id),
+            (status, error_message, current_step, progress_percent, completed_at, run_id),
         )
 
 

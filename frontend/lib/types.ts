@@ -11,6 +11,8 @@ export type Run = {
   id: string;
   paper_id: string;
   status: string;
+  current_step: string | null;
+  progress_percent: number;
   error_message: string | null;
   started_at: string | null;
   completed_at: string | null;

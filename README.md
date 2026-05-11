@@ -98,8 +98,9 @@ npm run dev
 上传 PDF
 -> 看到 paper_id
 -> 点击启动分析
--> 看到 run_id 和 completed 状态
--> 页面展示 Markdown 报告
+-> 立即看到 run_id
+-> 前端轮询 run 状态并展示 workflow 进度
+-> completed 后自动展示 Markdown 报告
 ```
 
 ## Frontend Quick Start
@@ -130,11 +131,12 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 - OpenAI-compatible 结构化输出入口
 - Markdown 报告生成
 - Next.js 最小演示闭环
+- 后台分析任务与前端轮询进度
 
 后续重点：
 
 - 提升元信息、方法、实验抽取质量
-- 增加 PDF 分析过程中的进度展示
+- 增加历史论文列表和报告详情页
 - 增加示例论文和测试用例
 
 ## Example Report

@@ -1,3 +1,5 @@
+from collections.abc import Callable
+
 from langgraph.graph import END, StateGraph
 
 from app.agents.nodes.analyze_experiments import analyze_experiments_node
@@ -27,18 +29,38 @@ NODE_ORDER = [
 ]
 
 
-def build_graph():
+ProgressCallback = Callable[[str, int], None]
+
+
+def _wrap_node(node_name: str, node_index: int, node_fn, progress_callback: ProgressCallback | None):
+    def wrapped_node(state: PaperAnalysisState) -> PaperAnalysisState:
+        total = len(NODE_ORDER)
+        if progress_callback:
+            progress_callback(node_name, int(node_index / total * 100))
+        result = node_fn(state)
+        if progress_callback:
+            progress_callback(node_name, int((node_index + 1) / total * 100))
+        return result
+
+    return wrapped_node
+
+
+def build_graph(progress_callback: ProgressCallback | None = None):
     graph = StateGraph(PaperAnalysisState)
-    graph.add_node("parse_pdf_node", parse_pdf_node)
-    graph.add_node("chunk_paper_node", chunk_paper_node)
-    graph.add_node("extract_metadata_node", extract_metadata_node)
-    graph.add_node("classify_paper_type_node", classify_paper_type_node)
-    graph.add_node("understand_paper_node", understand_paper_node)
-    graph.add_node("analyze_method_node", analyze_method_node)
-    graph.add_node("analyze_experiments_node", analyze_experiments_node)
-    graph.add_node("plan_reproduction_node", plan_reproduction_node)
-    graph.add_node("generate_report_node", generate_report_node)
-    graph.add_node("persist_result_node", persist_result_node)
+    node_fns = {
+        "parse_pdf_node": parse_pdf_node,
+        "chunk_paper_node": chunk_paper_node,
+        "extract_metadata_node": extract_metadata_node,
+        "classify_paper_type_node": classify_paper_type_node,
+        "understand_paper_node": understand_paper_node,
+        "analyze_method_node": analyze_method_node,
+        "analyze_experiments_node": analyze_experiments_node,
+        "plan_reproduction_node": plan_reproduction_node,
+        "generate_report_node": generate_report_node,
+        "persist_result_node": persist_result_node,
+    }
+    for index, node_name in enumerate(NODE_ORDER):
+        graph.add_node(node_name, _wrap_node(node_name, index, node_fns[node_name], progress_callback))
 
     graph.set_entry_point(NODE_ORDER[0])
     for current, next_node in zip(NODE_ORDER, NODE_ORDER[1:]):
@@ -50,7 +72,12 @@ def build_graph():
 workflow = build_graph()
 
 
-def run_analysis(paper_id: str, run_id: str, pdf_path: str) -> PaperAnalysisState:
+def run_analysis(
+    paper_id: str,
+    run_id: str,
+    pdf_path: str,
+    progress_callback: ProgressCallback | None = None,
+) -> PaperAnalysisState:
     initial_state: PaperAnalysisState = {
         "paper_id": paper_id,
         "run_id": run_id,
@@ -58,4 +85,5 @@ def run_analysis(paper_id: str, run_id: str, pdf_path: str) -> PaperAnalysisStat
         "status": "pending",
         "error_message": None,
     }
-    return workflow.invoke(initial_state)
+    active_workflow = build_graph(progress_callback) if progress_callback else workflow
+    return active_workflow.invoke(initial_state)
