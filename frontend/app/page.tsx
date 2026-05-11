@@ -5,11 +5,11 @@ export default function HomePage() {
     <main className="stack">
       <section>
         <h1>Paper2Repo</h1>
-        <p className="muted">AI 论文理解与复现规划 Agent。本地 MVP 先跑通 PDF 上传、结构化分析和 Markdown 报告生成。</p>
+        <p className="muted">AI 论文理解与复现规划 Agent。上传 PDF 后，本地完成解析、结构化分析，并生成 Markdown 复现报告。</p>
       </section>
 
       <section className="panel stack">
-        <h2>上传论文 PDF</h2>
+        <h2>本地分析工作流</h2>
         <PaperUpload />
       </section>
 

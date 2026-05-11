@@ -16,3 +16,12 @@ export type Run = {
   completed_at: string | null;
   created_at: string;
 };
+
+export type Report = {
+  run_id: string;
+  paper_id: string;
+  title: string;
+  content: string;
+  file_path: string;
+  created_at: string;
+};
