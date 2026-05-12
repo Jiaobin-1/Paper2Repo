@@ -128,7 +128,7 @@ def plan_reproduction_node(state: PaperAnalysisState) -> PaperAnalysisState:
         missing_information=missing_info,
         suggested_simplifications=["使用小数据子集", "优先跑 inference-only 或单 epoch", "先跳过昂贵消融实验", "用配置文件固定所有假设"],
     )
-    plan = llm_or_fallback(
+    plan, _used_llm = llm_or_fallback(
         system_prompt=COMMON_SYSTEM_PROMPT,
         task_prompt=PLAN_REPRODUCTION_PROMPT,
         schema_model=ReproductionPlan,
@@ -141,5 +141,6 @@ def plan_reproduction_node(state: PaperAnalysisState) -> PaperAnalysisState:
             f"Method analysis: {state['method_analysis'].model_dump_json()}\n"
             f"Experiment analysis: {state['experiment_analysis'].model_dump_json()}"
         ),
+        model_name=state.get("model_name"),
     )
     return {"reproduction_plan": plan, "status": "reproduction_planned"}

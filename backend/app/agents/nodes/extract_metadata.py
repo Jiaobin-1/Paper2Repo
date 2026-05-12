@@ -108,7 +108,7 @@ def _extract_authors(lines: list[str], title_index: int) -> list[str]:
         if len(line) > 160:
             continue
         authors.append(line)
-    return authors[:2]
+    return authors[:10]
 
 
 def _extract_abstract(text: str) -> str:

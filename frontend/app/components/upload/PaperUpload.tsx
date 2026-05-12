@@ -1,8 +1,19 @@
 "use client";
 
-import { useState } from "react";
-import { getReport, getRun, startAnalysis, uploadPaper } from "../../../lib/api";
-import type { Paper, Report, Run } from "../../../lib/types";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import Link from "next/link";
+import ReactMarkdown from "react-markdown";
+import {
+  getLlmConfig,
+  getReport,
+  getReportMarkdownUrl,
+  getReportPdfUrl,
+  getRun,
+  startAnalysis,
+  updateLlmConfig,
+  uploadPaper,
+} from "../../../lib/api";
+import type { LlmConfig, Paper, Report, Run } from "../../../lib/types";
 
 const WORKFLOW_STEPS = [
   { key: "parse_pdf_node", label: "解析 PDF" },
@@ -22,9 +33,91 @@ export default function PaperUpload() {
   const [paper, setPaper] = useState<Paper | null>(null);
   const [run, setRun] = useState<Run | null>(null);
   const [report, setReport] = useState<Report | null>(null);
+  const [llmConfig, setLlmConfig] = useState<LlmConfig | null>(null);
+  const [selectedModel, setSelectedModel] = useState("");
   const [message, setMessage] = useState("选择一篇 PDF 后开始本地分析。");
   const [isUploading, setIsUploading] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isSavingModel, setIsSavingModel] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const pollingAbortRef = useRef<AbortController | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const dragCountRef = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      pollingAbortRef.current?.abort();
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    getLlmConfig()
+      .then((config) => {
+        if (!isMounted) {
+          return;
+        }
+        setLlmConfig(config);
+        setSelectedModel(config.default_model);
+        if (!config.configured) {
+          setMessage("LLM 未配置，将使用本地 fallback。");
+        }
+      })
+      .catch((error) => {
+        if (!isMounted) {
+          return;
+        }
+        setMessage(error instanceof Error ? error.message : "模型配置加载失败。");
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  function validateAndSetFile(f: File): boolean {
+    if (f.type !== "application/pdf") {
+      setMessage("仅支持 PDF 文件。");
+      return false;
+    }
+    const MAX_SIZE = 50 * 1024 * 1024; // 50 MB
+    if (f.size > MAX_SIZE) {
+      setMessage(`文件过大（${formatFileSize(f.size)}），上限 50 MB。`);
+      return false;
+    }
+    setFile(f);
+    return true;
+  }
+
+  function handleDragEnter(event: React.DragEvent) {
+    event.preventDefault();
+    dragCountRef.current += 1;
+    setIsDragging(true);
+  }
+
+  function handleDragOver(event: React.DragEvent) {
+    event.preventDefault();
+  }
+
+  function handleDragLeave(event: React.DragEvent) {
+    event.preventDefault();
+    dragCountRef.current -= 1;
+    if (dragCountRef.current <= 0) {
+      dragCountRef.current = 0;
+      setIsDragging(false);
+    }
+  }
+
+  function handleDrop(event: React.DragEvent) {
+    event.preventDefault();
+    dragCountRef.current = 0;
+    setIsDragging(false);
+    const dropped = event.dataTransfer.files[0];
+    if (dropped) {
+      validateAndSetFile(dropped);
+    }
+  }
 
   async function handleUpload() {
     if (!file) {
@@ -40,6 +133,7 @@ export default function PaperUpload() {
       const uploadedPaper = await uploadPaper(file);
       setPaper(uploadedPaper);
       setMessage("上传成功，可以启动分析。");
+      window.dispatchEvent(new Event("paper2repo:runs-updated"));
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "上传失败。");
     } finally {
@@ -53,6 +147,10 @@ export default function PaperUpload() {
       return;
     }
 
+    pollingAbortRef.current?.abort();
+    const abortController = new AbortController();
+    pollingAbortRef.current = abortController;
+
     setIsAnalyzing(true);
     setRun(null);
     setReport(null);
@@ -63,20 +161,35 @@ export default function PaperUpload() {
       let latestRun = startedRun;
       setMessage("任务已提交，正在分析...");
 
+      let consecutiveErrors = 0;
       for (let attempt = 0; attempt < 600; attempt += 1) {
-        await sleep(1000);
-        latestRun = await getRun(startedRun.id);
+        await sleep(1000, abortController.signal);
+        try {
+          latestRun = await getRun(startedRun.id);
+          consecutiveErrors = 0;
+        } catch {
+          consecutiveErrors += 1;
+          if (consecutiveErrors >= 5) {
+            setMessage("网络连接中断，分析监控已停止。");
+            return;
+          }
+          setMessage(`网络请求失败，正在重试 (${consecutiveErrors}/5)...`);
+          continue;
+        }
+        if (abortController.signal.aborted) return;
         setRun(latestRun);
 
         if (latestRun.status === "completed") {
           const generatedReport = await getReport(latestRun.id);
           setReport(generatedReport);
           setMessage("分析完成，报告已生成。");
+          window.dispatchEvent(new Event("paper2repo:runs-updated"));
           return;
         }
 
         if (latestRun.status === "failed") {
           setMessage(latestRun.error_message ?? "分析失败。");
+          window.dispatchEvent(new Event("paper2repo:runs-updated"));
           return;
         }
 
@@ -84,25 +197,99 @@ export default function PaperUpload() {
       }
       setMessage("分析仍在运行，请稍后刷新任务状态。");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "分析失败。");
+      if (abortController.signal.aborted) {
+        return;
+      }
+      setMessage(error instanceof Error ? error.message : "分析失败。请确认后端服务正在运行。");
     } finally {
-      setIsAnalyzing(false);
+      if (pollingAbortRef.current === abortController) {
+        pollingAbortRef.current = null;
+        setIsAnalyzing(false);
+      }
+    }
+  }
+
+  async function handleModelChange(event: ChangeEvent<HTMLSelectElement>) {
+    const nextModel = event.target.value;
+    setSelectedModel(nextModel);
+    setIsSavingModel(true);
+    try {
+      const updatedConfig = await updateLlmConfig(nextModel);
+      setLlmConfig(updatedConfig);
+      setSelectedModel(updatedConfig.default_model);
+      setMessage(
+        updatedConfig.configured
+          ? `已切换默认模型：${updatedConfig.default_model}`
+          : `已切换默认模型：${updatedConfig.default_model}。LLM 未配置，将使用本地 fallback。`,
+      );
+    } catch (error) {
+      setSelectedModel(llmConfig?.default_model ?? "");
+      setMessage(error instanceof Error ? error.message : "模型切换失败。");
+    } finally {
+      setIsSavingModel(false);
     }
   }
 
   return (
     <div className="stack">
-      <div className="upload-row">
+      <section className="model-panel">
+        <label className="field-label" htmlFor="model-select">
+          分析模型
+        </label>
+        <select
+          id="model-select"
+          className="select"
+          value={selectedModel}
+          disabled={!llmConfig || isSavingModel || isUploading || isAnalyzing}
+          onChange={handleModelChange}
+        >
+          {llmConfig ? (
+            llmConfig.available_models.map((model) => (
+              <option key={model} value={model}>
+                {model}
+              </option>
+            ))
+          ) : (
+            <option value="">加载模型配置...</option>
+          )}
+        </select>
+        <p className="muted">
+          {llmConfig
+            ? `${llmConfig.configured ? "LLM 已配置" : "LLM 未配置，本地 fallback"} · ${llmConfig.base_url}`
+            : "正在读取后端模型配置..."}
+        </p>
+      </section>
+
+      <div
+        className={`drop-zone${isDragging ? " drop-zone-active" : ""}`}
+        onDragEnter={handleDragEnter}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        onClick={() => fileInputRef.current?.click()}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") fileInputRef.current?.click();
+        }}
+      >
         <input
-          className="input"
+          ref={fileInputRef}
+          hidden
           type="file"
           accept="application/pdf"
-          onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+          onChange={(event) => {
+            const selected = event.target.files?.[0];
+            if (selected) validateAndSetFile(selected);
+          }}
         />
-        <button className="button" type="button" disabled={isUploading || isAnalyzing} onClick={handleUpload}>
+        <p className="muted">{file ? file.name : "拖拽 PDF 到此处，或点击选择文件"}</p>
+      </div>
+      <div className="upload-row">
+        <button className="button" type="button" disabled={!file || isUploading || isAnalyzing} onClick={handleUpload}>
           {isUploading ? "上传中..." : "上传 PDF"}
         </button>
-        <button className="button secondary" type="button" disabled={!paper || isUploading || isAnalyzing} onClick={handleAnalyze}>
+        <button className="button secondary" type="button" disabled={!paper || isUploading || isAnalyzing || isSavingModel} onClick={handleAnalyze}>
           {isAnalyzing ? "分析中..." : "启动分析"}
         </button>
       </div>
@@ -113,6 +300,7 @@ export default function PaperUpload() {
         <InfoBlock title="Paper ID" value={paper?.id ?? "上传后显示"} />
         <InfoBlock title="Run ID" value={run?.id ?? "启动分析后显示"} />
         <InfoBlock title="Run 状态" value={run ? `${run.status} · ${run.progress_percent}%` : "pending"} />
+        <InfoBlock title="模型" value={run?.model_name ?? selectedModel ?? "模型配置加载中"} />
       </div>
 
       {run ? <WorkflowProgress run={run} /> : null}
@@ -123,7 +311,7 @@ export default function PaperUpload() {
           <p>
             <strong>{paper.filename}</strong>
           </p>
-          <p className="muted">文件大小：{paper.file_size} bytes</p>
+          <p className="muted">文件大小：{formatFileSize(paper.file_size)}</p>
         </section>
       ) : null}
 
@@ -139,10 +327,23 @@ export default function PaperUpload() {
           <div className="report-header">
             <div>
               <h3>{report.title}</h3>
-              <p className="muted">报告路径：{report.file_path}</p>
+              <p className="muted">报告已生成，可打开详情页或下载文件。</p>
+            </div>
+            <div className="action-row">
+              <Link className="button" href={`/runs/${report.run_id}`}>
+                查看 Markdown
+              </Link>
+              <a className="button secondary" href={getReportMarkdownUrl(report.run_id)} download>
+                下载 Markdown
+              </a>
+              <a className="button secondary" href={getReportPdfUrl(report.run_id)} download>
+                下载 PDF
+              </a>
             </div>
           </div>
-          <pre>{report.content}</pre>
+          <article className="markdown-body">
+            <ReactMarkdown>{report.content}</ReactMarkdown>
+          </article>
         </section>
       ) : null}
     </div>
@@ -160,6 +361,7 @@ function InfoBlock({ title, value }: { title: string; value: string }) {
 
 function WorkflowProgress({ run }: { run: Run }) {
   const progress = Math.max(0, Math.min(100, run.progress_percent ?? 0));
+  const currentStepIndex = WORKFLOW_STEPS.findIndex((s) => s.key === run.current_step);
 
   return (
     <section className="progress-panel">
@@ -175,9 +377,8 @@ function WorkflowProgress({ run }: { run: Run }) {
       </div>
       <ol className="stepper">
         {WORKFLOW_STEPS.map((step, index) => {
-          const stepDoneThreshold = Math.round(((index + 1) / WORKFLOW_STEPS.length) * 100);
-          const isComplete = run.status === "completed" || progress >= stepDoneThreshold;
-          const isActive = run.current_step === step.key && run.status !== "completed";
+          const isComplete = run.status === "completed" || (currentStepIndex >= 0 && index < currentStepIndex);
+          const isActive = run.status !== "completed" && index === currentStepIndex;
           return (
             <li key={step.key} className={isComplete ? "done" : isActive ? "active" : ""}>
               <span>{isComplete ? "✓" : index + 1}</span>
@@ -206,6 +407,27 @@ function stepLabel(step: string | null): string {
   return WORKFLOW_STEPS.find((item) => item.key === step)?.label ?? step;
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => window.setTimeout(resolve, ms));
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb.toFixed(1)} KB`;
+  return `${(kb / 1024).toFixed(1)} MB`;
+}
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException("Aborted", "AbortError"));
+      return;
+    }
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer);
+        reject(new DOMException("Aborted", "AbortError"));
+      },
+      { once: true },
+    );
+  });
 }

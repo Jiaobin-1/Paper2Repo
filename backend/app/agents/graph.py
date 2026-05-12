@@ -69,21 +69,30 @@ def build_graph(progress_callback: ProgressCallback | None = None):
     return graph.compile()
 
 
-workflow = build_graph()
+_default_workflow = None
+
+
+def _get_default_workflow():
+    global _default_workflow
+    if _default_workflow is None:
+        _default_workflow = build_graph()
+    return _default_workflow
 
 
 def run_analysis(
     paper_id: str,
     run_id: str,
     pdf_path: str,
+    model_name: str | None = None,
     progress_callback: ProgressCallback | None = None,
 ) -> PaperAnalysisState:
     initial_state: PaperAnalysisState = {
         "paper_id": paper_id,
         "run_id": run_id,
         "pdf_path": pdf_path,
+        "model_name": model_name or "",
         "status": "pending",
         "error_message": None,
     }
-    active_workflow = build_graph(progress_callback) if progress_callback else workflow
+    active_workflow = build_graph(progress_callback) if progress_callback else _get_default_workflow()
     return active_workflow.invoke(initial_state)

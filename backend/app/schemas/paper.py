@@ -14,9 +14,15 @@ class RunResponse(BaseModel):
     id: str
     paper_id: str
     status: str
+    model_name: str | None = None
     current_step: str | None = None
     progress_percent: int = 0
     error_message: str | None = None
     started_at: str | None = None
     completed_at: str | None = None
     created_at: str
+
+
+class RunListItemResponse(RunResponse):
+    paper_title: str | None = None
+    paper_filename: str

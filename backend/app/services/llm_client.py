@@ -13,8 +13,11 @@ SchemaT = TypeVar("SchemaT", bound=BaseModel)
 
 
 class LLMClient:
-    def __init__(self) -> None:
+    _client: OpenAI | None = None
+
+    def __init__(self, model_name: str | None = None) -> None:
         self.settings = get_settings()
+        self.model_name = model_name or self.settings.openai_model
 
     def is_configured(self) -> bool:
         return bool(self.settings.openai_api_key)
@@ -22,7 +25,9 @@ class LLMClient:
     def client(self) -> OpenAI:
         if not self.is_configured():
             raise RuntimeError("OPENAI_API_KEY is not configured.")
-        return OpenAI(api_key=self.settings.openai_api_key, base_url=self.settings.openai_base_url)
+        if LLMClient._client is None:
+            LLMClient._client = OpenAI(api_key=self.settings.openai_api_key, base_url=self.settings.openai_base_url)
+        return LLMClient._client
 
     def structured_output(
         self,
@@ -34,7 +39,7 @@ class LLMClient:
     ) -> SchemaT:
         schema = json.dumps(schema_model.model_json_schema(), ensure_ascii=False)
         response = self.client().chat.completions.create(
-            model=self.settings.openai_model,
+            model=self.model_name,
             temperature=temperature,
             response_format={"type": "json_object"},
             messages=[
@@ -49,6 +54,8 @@ class LLMClient:
                 },
             ],
         )
+        if not response.choices:
+            raise RuntimeError("LLM returned an empty response with no choices.")
         content = response.choices[0].message.content or "{}"
         return schema_model.model_validate(_load_json_object(content))
 
@@ -61,10 +68,52 @@ def _load_json_object(content: str) -> dict:
     try:
         value = json.loads(cleaned)
     except json.JSONDecodeError:
-        match = re.search(r"\{.*\}", cleaned, flags=re.DOTALL)
-        if not match:
+        json_object = _extract_json_object(cleaned)
+        if not json_object:
             raise
-        value = json.loads(match.group(0))
+        value = json.loads(json_object)
     if not isinstance(value, dict):
         raise ValueError("LLM response must be a JSON object.")
     return value
+
+
+def _extract_json_object(content: str) -> str | None:
+    for start, char in enumerate(content):
+        if char != "{":
+            continue
+        candidate = _balanced_json_from(content, start)
+        if not candidate:
+            continue
+        try:
+            json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        return candidate
+    return None
+
+
+def _balanced_json_from(content: str, start: int) -> str | None:
+    depth = 0
+    in_string = False
+    escape = False
+    for index in range(start, len(content)):
+        char = content[index]
+        if in_string:
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+            continue
+
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return content[start : index + 1]
+
+    return None

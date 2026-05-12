@@ -39,6 +39,7 @@ curl http://127.0.0.1:8000/health
 OPENAI_API_KEY=
 OPENAI_BASE_URL=https://api.openai.com/v1
 OPENAI_MODEL=gpt-4o-mini
+OPENAI_MODEL_OPTIONS=gpt-4o-mini,gpt-4o,deepseek-chat
 
 DATABASE_URL=sqlite:///./data/paper2repo.db
 UPLOAD_DIR=./storage/uploads
@@ -61,6 +62,7 @@ cp .env.example .env
 OPENAI_API_KEY=你的 API Key
 OPENAI_BASE_URL=https://你的服务商地址/v1
 OPENAI_MODEL=你的模型名
+OPENAI_MODEL_OPTIONS=模型名1,模型名2,模型名3
 ```
 
 示例：
@@ -70,6 +72,7 @@ OPENAI_MODEL=你的模型名
 OPENAI_API_KEY=sk-xxx
 OPENAI_BASE_URL=https://api.example.com/v1
 OPENAI_MODEL=deepseek-chat
+OPENAI_MODEL_OPTIONS=deepseek-chat,deepseek-reasoner
 ```
 
 修改 `.env` 后需要重启后端，因为配置会在应用启动时读取：
@@ -79,7 +82,18 @@ cd backend
 conda run -n agent-learning python -m uvicorn app.main:app --reload
 ```
 
-如果你的服务商兼容 OpenAI Chat Completions，Paper2Repo 会通过 `OPENAI_BASE_URL`、`OPENAI_API_KEY`、`OPENAI_MODEL` 调用它。
+如果你的服务商兼容 OpenAI Chat Completions，Paper2Repo 会通过 `OPENAI_BASE_URL`、`OPENAI_API_KEY` 和当前默认模型调用它。`OPENAI_MODEL` 是首次默认模型，`OPENAI_MODEL_OPTIONS` 是前端下拉框可选模型列表；如果不配置 `OPENAI_MODEL_OPTIONS`，前端只会显示 `OPENAI_MODEL`。
+
+前端会读取后端的 `GET /api/llm/config`，显示：
+
+```text
+LLM 是否已配置
+当前 base_url
+当前默认模型
+可选模型列表
+```
+
+在前端切换模型后，后端会保存为全局默认模型，后续新启动的 run 会使用该模型；已经运行中的 run 不受影响。每个 run 的实际模型会通过 `GET /api/runs/{run_id}` 的 `model_name` 字段返回。
 
 ## API
 
@@ -88,9 +102,14 @@ conda run -n agent-learning python -m uvicorn app.main:app --reload
 - `GET /api/papers`
 - `GET /api/papers/{paper_id}`
 - `POST /api/papers/{paper_id}/runs`
+- `GET /api/llm/config`
+- `PUT /api/llm/config`
 - `GET /api/runs/{run_id}`
+- `GET /api/runs`
 - `GET /api/runs/{run_id}/analysis`
 - `GET /api/runs/{run_id}/report`
+- `GET /api/runs/{run_id}/report.md`
+- `GET /api/runs/{run_id}/report.pdf`
 
 ## Workflow
 
@@ -131,10 +150,12 @@ npm run dev
 ```text
 上传 PDF
 -> 看到 paper_id
+-> 选择分析模型
 -> 点击启动分析
 -> 立即看到 run_id
 -> 前端轮询 run 状态并展示 workflow 进度
 -> completed 后自动展示 Markdown 报告
+-> 进入报告详情页，下载 Markdown 或 PDF
 ```
 
 ## Frontend Quick Start
@@ -145,7 +166,7 @@ npm install
 npm run dev
 ```
 
-默认后端地址是 `http://localhost:8000`。如需修改，设置：
+前端默认通过 Next.js rewrite 把 `/api/*` 转发到 `http://127.0.0.1:8000`。如需改为直接访问其他后端地址，设置：
 
 ```bash
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
@@ -164,8 +185,12 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 - section title + keyword retrieval 工具
 - OpenAI-compatible 结构化输出入口
 - Markdown 报告生成
+- PDF 报告下载
+- Markdown 报告下载
+- 最近分析列表和 Run 报告详情页
 - Next.js 最小演示闭环
 - 后台分析任务与前端轮询进度
+- 前端模型选择与后端全局默认模型配置
 
 后续重点：
 

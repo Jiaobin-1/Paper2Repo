@@ -1,5 +1,6 @@
 .DS_Store
 .env
+CLAUDE.md
 *.pyc
 __pycache__/
 .pytest_cache/
@@ -13,4 +14,5 @@ backend/storage/reports/
 frontend/.next/
 frontend/node_modules/
 frontend/.env.local
+frontend/tsconfig.tsbuildinfo
 frontend/out/

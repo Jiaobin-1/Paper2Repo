@@ -89,7 +89,7 @@ def analyze_experiments_node(state: PaperAnalysisState) -> PaperAnalysisState:
             "当前 PDF 片段未明确说明评价协议。",
         ),
     )
-    experiments = llm_or_fallback(
+    experiments, _used_llm = llm_or_fallback(
         system_prompt=COMMON_SYSTEM_PROMPT,
         task_prompt=ANALYZE_EXPERIMENTS_PROMPT,
         schema_model=ExperimentAnalysis,
@@ -100,5 +100,6 @@ def analyze_experiments_node(state: PaperAnalysisState) -> PaperAnalysisState:
             f"Paper classification: {state['classification'].model_dump_json()}\n"
             f"Method analysis: {state['method_analysis'].model_dump_json()}"
         ),
+        model_name=state.get("model_name"),
     )
     return {"experiment_analysis": experiments, "status": "experiments_analyzed"}

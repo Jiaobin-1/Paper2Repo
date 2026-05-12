@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 from collections.abc import Iterable
 
@@ -7,6 +8,8 @@ from pydantic import BaseModel
 
 from app.schemas.chunks import RetrievedChunk
 from app.services.llm_client import LLMClient
+
+logger = logging.getLogger(__name__)
 
 
 def context_block(chunks: list[RetrievedChunk], max_chars: int = 9000) -> str:
@@ -86,17 +89,20 @@ def llm_or_fallback(
     fallback: BaseModel,
     context: str,
     extra: str = "",
-) -> BaseModel:
-    client = LLMClient()
+    model_name: str | None = None,
+) -> tuple[BaseModel, bool]:
+    client = LLMClient(model_name=model_name)
     if not client.is_configured():
-        return fallback
+        return fallback, False
 
     user_prompt = f"{task_prompt}\n\n{extra}\n\nPaper context:\n{context}".strip()
     try:
-        return client.structured_output(
+        result = client.structured_output(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             schema_model=schema_model,
         )
+        return result, True
     except Exception:
-        return fallback
+        logger.warning("LLM call failed for %s, using fallback", schema_model.__name__, exc_info=True)
+        return fallback, False

@@ -50,7 +50,7 @@ def understand_paper_node(state: PaperAnalysisState) -> PaperAnalysisState:
             if item and item != "other"
         ],
     )
-    understanding = llm_or_fallback(
+    understanding, _used_llm = llm_or_fallback(
         system_prompt=COMMON_SYSTEM_PROMPT,
         task_prompt=UNDERSTAND_PAPER_PROMPT,
         schema_model=PaperUnderstanding,
@@ -61,5 +61,6 @@ def understand_paper_node(state: PaperAnalysisState) -> PaperAnalysisState:
             f"Abstract: {metadata.abstract}\n"
             f"Classification: {state['classification'].model_dump_json()}"
         ),
+        model_name=state.get("model_name"),
     )
     return {"understanding": understanding, "status": "understood"}

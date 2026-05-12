@@ -11,7 +11,6 @@ class PaperTypeClassification(BaseModel):
         "nlp",
         "cv",
         "recommendation",
-        "machine_learning",
         "deep_learning",
         "multimodal",
         "other",
@@ -23,7 +22,6 @@ class PaperTypeClassification(BaseModel):
         "dataset",
         "theoretical",
         "survey",
-        "other",
     ] = "experimental"
     reproduction_mode: Literal[
         "training_from_scratch",

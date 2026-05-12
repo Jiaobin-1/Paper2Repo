@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import shutil
 import uuid
 from pathlib import Path
@@ -17,10 +18,12 @@ from app.core.database import (
 )
 from app.schemas.paper import PaperResponse, RunResponse
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/papers", tags=["papers"])
 
 
-def run_analysis_background(paper_id: str, run_id: str, pdf_path: str) -> None:
+def run_analysis_background(paper_id: str, run_id: str, pdf_path: str, model_name: str | None) -> None:
     def record_progress(current_step: str, progress_percent: int) -> None:
         update_run_status(
             run_id,
@@ -35,6 +38,7 @@ def run_analysis_background(paper_id: str, run_id: str, pdf_path: str) -> None:
             paper_id=paper_id,
             run_id=run_id,
             pdf_path=pdf_path,
+            model_name=model_name,
             progress_callback=record_progress,
         )
         update_run_status(
@@ -45,13 +49,17 @@ def run_analysis_background(paper_id: str, run_id: str, pdf_path: str) -> None:
             progress_percent=100,
         )
     except Exception as exc:
-        update_run_status(
-            run_id,
-            "failed",
-            error_message=str(exc),
-            completed=True,
-            current_step="failed",
-        )
+        logger.exception("Analysis failed for run %s", run_id)
+        try:
+            update_run_status(
+                run_id,
+                "failed",
+                error_message=str(exc),
+                completed=True,
+                current_step="failed",
+            )
+        except Exception:
+            logger.exception("Failed to update run status after error for run %s", run_id)
 
 
 @router.post("/upload", response_model=PaperResponse)
@@ -62,11 +70,17 @@ def upload_paper(file: UploadFile = File(...)) -> PaperResponse:
     settings = get_settings()
     settings.upload_path.mkdir(parents=True, exist_ok=True)
     safe_name = Path(file.filename).name
+    if len(safe_name) > 200:
+        suffix = Path(safe_name).suffix[:10]
+        safe_name = safe_name[:200 - len(suffix)] + suffix
     stored_name = f"{uuid.uuid4()}_{safe_name}"
     file_path = settings.upload_path / stored_name
 
-    with file_path.open("wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    try:
+        with file_path.open("wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    finally:
+        file.file.close()
 
     paper = create_paper(filename=safe_name, file_path=file_path, file_size=file_path.stat().st_size)
     return PaperResponse(**paper)
@@ -92,5 +106,5 @@ def start_run(paper_id: str, background_tasks: BackgroundTasks) -> RunResponse:
         raise HTTPException(status_code=404, detail="Paper not found.")
 
     run = create_run(paper_id)
-    background_tasks.add_task(run_analysis_background, paper_id, run["id"], paper["file_path"])
+    background_tasks.add_task(run_analysis_background, paper_id, run["id"], paper["file_path"], run.get("model_name"))
     return RunResponse(**run)

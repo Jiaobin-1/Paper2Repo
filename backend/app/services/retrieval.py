@@ -6,6 +6,10 @@ from collections import Counter
 from app.schemas.chunks import PaperChunk, RetrievedChunk
 
 
+def _count_word(term: str, text: str) -> int:
+    return len(re.findall(r'\b' + re.escape(term) + r'\b', text))
+
+
 def _terms(values: list[str]) -> list[str]:
     terms: list[str] = []
     for value in values:
@@ -40,8 +44,9 @@ def retrieve_context(
 
         counts = Counter()
         for term in keyword_terms + query_terms:
-            if term in content:
-                counts[term] += content.count(term)
+            count = _count_word(term, content)
+            if count:
+                counts[term] += count
 
         for term, count in counts.items():
             score += min(count, 5) * 1.0

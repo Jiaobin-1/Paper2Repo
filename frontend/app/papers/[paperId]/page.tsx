@@ -1,25 +1,18 @@
-export default function PaperDetailPage({ params }: { params: { paperId: string } }) {
+export default async function PaperDetailPage({ params }: { params: Promise<{ paperId: string }> }) {
+  const { paperId } = await params;
   return (
     <main className="stack">
       <section>
         <h1>论文详情</h1>
-        <p className="muted">Paper ID: {params.paperId}</p>
+        <p className="muted">Paper ID: {paperId}</p>
       </section>
 
       <section className="panel stack">
-        <h2>分析状态</h2>
-        <p className="muted">这里预留启动分析、查看任务状态和展示结构化结果的位置。</p>
-      </section>
-
-      <section className="grid">
-        <div className="panel">
-          <h3>论文理解</h3>
-          <p className="muted">背景、问题、贡献、方法、结论。</p>
-        </div>
-        <div className="panel">
-          <h3>复现规划</h3>
-          <p className="muted">最小目标、工程模块、代码骨架、风险点。</p>
-        </div>
+        <h2>历史分析</h2>
+        <p className="muted">当前正式报告入口按 Run ID 管理。请回到首页的“最近论文 / 最近分析”列表进入对应报告。</p>
+        <a className="button secondary" href="/">
+          返回首页
+        </a>
       </section>
     </main>
   );

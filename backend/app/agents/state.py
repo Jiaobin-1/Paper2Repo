@@ -15,6 +15,7 @@ class PaperAnalysisState(TypedDict, total=False):
     paper_id: str
     run_id: str
     pdf_path: str
+    model_name: str
 
     parsed_paper: ParsedPaper
     chunked_paper: ChunkedPaper

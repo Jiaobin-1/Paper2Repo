@@ -1,39 +1,76 @@
 # Paper2Repo API
 
+Paper2Repo exposes a local FastAPI API for PDF upload, background analysis runs, structured results, and report downloads.
+
 ## Health
 
-`GET /health`
+- `GET /health`
 
 Returns service status.
 
 ## Papers
 
-`POST /api/papers/upload`
+- `POST /api/papers/upload`
 
-Multipart form upload with field `file`.
+Uploads a PDF with multipart field `file`. Returns the saved paper record.
 
-`GET /api/papers`
+- `GET /api/papers`
 
 Returns uploaded papers.
 
-`GET /api/papers/{paper_id}`
+- `GET /api/papers/{paper_id}`
 
-Returns one paper.
+Returns one uploaded paper.
 
 ## Runs
 
-`POST /api/papers/{paper_id}/runs`
+- `POST /api/papers/{paper_id}/runs`
 
-Starts a synchronous MVP analysis run.
+Creates a run immediately and starts the LangGraph workflow in a FastAPI background task. The response includes `run_id`, `status`, `current_step`, `progress_percent`, and `model_name`.
 
-`GET /api/runs/{run_id}`
+- `GET /api/runs`
 
-Returns run status.
+Returns recent runs. Optional query parameters:
 
-`GET /api/runs/{run_id}/analysis`
+```text
+paper_id=<paper id>
+limit=20
+```
 
-Returns structured JSON analysis results.
+- `GET /api/runs/{run_id}`
 
-`GET /api/runs/{run_id}/report`
+Returns run status for frontend polling.
 
-Returns Markdown report content and local report path.
+- `GET /api/runs/{run_id}/analysis`
+
+Returns structured JSON analysis results after the workflow persists output.
+
+## Reports
+
+- `GET /api/runs/{run_id}/report`
+
+Returns Markdown report content as JSON.
+
+- `GET /api/runs/{run_id}/report.md`
+
+Downloads the Markdown report as a file.
+
+- `GET /api/runs/{run_id}/report.pdf`
+
+Downloads a generated PDF copy of the report.
+
+## LLM Config
+
+- `GET /api/llm/config`
+
+Returns whether the OpenAI-compatible API is configured, current `base_url`, default model, and available models.
+
+- `PUT /api/llm/config`
+
+Updates the global default model for new runs. Request body:
+
+```json
+{
+  "default_model": "deepseek-chat"
+}
+```

@@ -1,7 +1,17 @@
 from __future__ import annotations
 
+import re
+
 from app.agents.state import PaperAnalysisState
 from app.schemas.classification import PaperTypeClassification
+
+
+def _word_match(term: str, text: str) -> bool:
+    return bool(re.search(r'\b' + re.escape(term) + r'\b', text))
+
+
+def _any_word_match(terms: list[str], text: str) -> bool:
+    return any(_word_match(term, text) for term in terms)
 
 
 def classify_paper_type_node(state: PaperAnalysisState) -> PaperAnalysisState:
@@ -16,63 +26,63 @@ def classify_paper_type_node(state: PaperAnalysisState) -> PaperAnalysisState:
 
     domain = "other"
     domain_reason = "No strong domain keyword was detected in title, abstract, keywords, or early paper text."
-    if any(term in text for term in ["large language model", "llm", "instruction tuning"]):
+    if _any_word_match(["large language model", "llm", "instruction tuning"], text):
         domain = "llm"
         domain_reason = "Detected LLM-related terms such as large language model, LLM, or instruction tuning."
-    elif any(term in text for term in ["agent", "multi-agent", "tool use"]):
+    elif _any_word_match(["agent", "multi-agent", "tool use"], text):
         domain = "agent"
         domain_reason = "Detected agent-related terms such as agent, multi-agent, or tool use."
-    elif any(term in text for term in ["retrieval augmented", "rag", "retrieval"]):
+    elif _any_word_match(["retrieval augmented", "rag", "retrieval"], text):
         domain = "rag"
         domain_reason = "Detected retrieval/RAG-related terms such as retrieval augmented, RAG, or retrieval."
-    elif any(term in text for term in ["language model", "nlp", "text classification"]):
+    elif _any_word_match(["language model", "nlp", "text classification"], text):
         domain = "nlp"
         domain_reason = "Detected NLP-related terms such as language model, NLP, or text classification."
-    elif any(term in text for term in ["image", "vision", "detection", "segmentation"]):
+    elif _any_word_match(["image", "vision", "detection", "segmentation"], text):
         domain = "cv"
         domain_reason = "Detected CV-related terms such as image, vision, detection, or segmentation."
-    elif "recommend" in text:
+    elif _word_match("recommend", text):
         domain = "recommendation"
         domain_reason = "Detected recommendation-related terms."
-    elif any(term in text for term in ["multimodal", "vision-language"]):
+    elif _any_word_match(["multimodal", "vision-language"], text):
         domain = "multimodal"
         domain_reason = "Detected multimodal or vision-language terms."
-    elif any(term in text for term in ["deep learning", "neural network", "transformer"]):
+    elif _any_word_match(["deep learning", "neural network", "transformer"], text):
         domain = "deep_learning"
         domain_reason = "Detected deep-learning terms such as neural network or transformer."
 
     paper_type = "experimental"
     type_reason = "Detected experiment/evaluation-oriented wording, so the paper is treated as experimental by default."
-    if any(term in text for term in ["survey", "review"]):
+    if _any_word_match(["survey", "review"], text):
         paper_type = "survey"
         type_reason = "Detected survey/review wording."
-    elif "benchmark" in text:
+    elif _word_match("benchmark", text):
         paper_type = "benchmark"
         type_reason = "Detected benchmark-oriented wording."
-    elif "dataset" in text and "we propose" in text:
+    elif _word_match("dataset", text) and "we propose" in text:
         paper_type = "dataset"
         type_reason = "Detected dataset and proposal wording."
-    elif any(term in text for term in ["system", "platform", "framework"]):
+    elif _any_word_match(["system", "platform", "framework"], text):
         paper_type = "system"
         type_reason = "Detected system/framework-oriented wording."
-    elif any(term in text for term in ["theorem", "proof", "lemma"]):
+    elif _any_word_match(["theorem", "proof", "lemma"], text):
         paper_type = "theoretical"
         type_reason = "Detected theorem/proof/lemma wording."
 
     reproduction_mode = "benchmark_evaluation"
     mode_reason = "Benchmark-style evaluation is a conservative default for experimental AI papers."
-    if any(term in text for term in ["fine-tuning", "finetuning", "instruction tuning"]):
+    if _any_word_match(["fine-tuning", "finetuning", "instruction tuning"], text):
         reproduction_mode = "fine_tuning"
         mode_reason = "Detected fine-tuning or instruction-tuning wording."
-    elif any(term in text for term in ["train from scratch", "pretraining", "pre-training"]):
+    elif _any_word_match(["train from scratch", "pretraining", "pre-training"], text):
         reproduction_mode = "training_from_scratch"
         mode_reason = "Detected training-from-scratch or pretraining wording."
-    elif any(term in text for term in ["inference", "pipeline", "prompt"]):
-        reproduction_mode = "inference_pipeline"
-        mode_reason = "Detected inference/pipeline/prompt wording."
-    elif "ablation" in text:
+    elif _word_match("ablation", text):
         reproduction_mode = "ablation_reproduction"
         mode_reason = "Detected ablation-oriented wording."
+    elif _any_word_match(["inference", "pipeline", "prompt"], text):
+        reproduction_mode = "inference_pipeline"
+        mode_reason = "Detected inference/pipeline/prompt wording."
     if paper_type in {"survey", "theoretical"}:
         reproduction_mode = "not_recommended"
         mode_reason = "Survey/theoretical papers are not ideal for MVP engineering reproduction."
@@ -80,11 +90,11 @@ def classify_paper_type_node(state: PaperAnalysisState) -> PaperAnalysisState:
     difficulty = "medium"
     blockers: list[str] = []
     resources = ["Python environment", "paper PDF", "dataset access"]
-    if any(term in text for term in ["billion", "large-scale", "distributed", "gpu cluster"]):
+    if _any_word_match(["billion", "large-scale", "distributed", "gpu cluster"], text):
         difficulty = "very_high"
         blockers.append("Potential large-scale compute requirement")
         resources.append("GPU resources")
-    elif any(term in text for term in ["fine-tuning", "transformer", "diffusion"]):
+    elif _any_word_match(["fine-tuning", "transformer", "diffusion"], text):
         difficulty = "high"
         resources.append("GPU resources")
     elif paper_type in {"benchmark", "dataset"}:

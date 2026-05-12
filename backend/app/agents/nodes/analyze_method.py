@@ -101,7 +101,7 @@ def analyze_method_node(state: PaperAnalysisState) -> PaperAnalysisState:
             )
         ),
     )
-    method = llm_or_fallback(
+    method, _used_llm = llm_or_fallback(
         system_prompt=COMMON_SYSTEM_PROMPT,
         task_prompt=ANALYZE_METHOD_PROMPT,
         schema_model=MethodAnalysis,
@@ -111,5 +111,6 @@ def analyze_method_node(state: PaperAnalysisState) -> PaperAnalysisState:
             f"Paper metadata: {state['metadata'].model_dump_json()}\n"
             f"Paper understanding: {state['understanding'].model_dump_json()}"
         ),
+        model_name=state.get("model_name"),
     )
     return {"method_analysis": method, "status": "method_analyzed"}
