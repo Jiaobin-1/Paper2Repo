@@ -2,6 +2,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.schemas.common import EvidenceRef, MissingItem
+
 
 class ReproductionModule(BaseModel):
     name: str
@@ -39,6 +41,9 @@ class RiskPoint(BaseModel):
 class ReproductionPlan(BaseModel):
     feasibility_summary: str = ""
     feasibility_level: Literal["high", "medium", "low"] = "medium"
+    audit_summary: str = ""
+    confidence: Literal["high", "medium", "low"] = "medium"
+    recommended_first_experiment: str = ""
     minimum_reproduction_goal: str = ""
     reproduction_scope: list[str] = Field(default_factory=list)
     required_modules: list[ReproductionModule] = Field(default_factory=list)
@@ -49,4 +54,7 @@ class ReproductionPlan(BaseModel):
     experiment_checklist: list[ChecklistItem] = Field(default_factory=list)
     risk_points: list[RiskPoint] = Field(default_factory=list)
     missing_information: list[str] = Field(default_factory=list)
+    blocking_missing_items: list[MissingItem] = Field(default_factory=list)
+    acceptance_criteria: list[str] = Field(default_factory=list)
+    evidence_refs: list[EvidenceRef] = Field(default_factory=list)
     suggested_simplifications: list[str] = Field(default_factory=list)

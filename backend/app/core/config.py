@@ -3,7 +3,6 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -28,6 +27,8 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./data/paper2repo.db"
     upload_dir: str = "./storage/uploads"
     report_dir: str = "./storage/reports"
+    upload_max_mb: int = 50
+    run_stale_after_minutes: int = 60
 
     model_config = SettingsConfigDict(
         env_file=BACKEND_ROOT.parent / ".env",
@@ -46,6 +47,10 @@ class Settings(BaseSettings):
     @property
     def report_path(self) -> Path:
         return _resolve_backend_path(self.report_dir)
+
+    @property
+    def upload_max_bytes(self) -> int:
+        return max(1, self.upload_max_mb) * 1024 * 1024
 
     @property
     def available_openai_models(self) -> list[str]:

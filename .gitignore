@@ -6,6 +6,8 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.coverage
+htmlcov/
 
 backend/data/
 backend/storage/uploads/
@@ -16,3 +18,5 @@ frontend/node_modules/
 frontend/.env.local
 frontend/tsconfig.tsbuildinfo
 frontend/out/
+frontend/test-results/
+frontend/playwright-report/

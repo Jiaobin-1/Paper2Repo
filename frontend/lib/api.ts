@@ -1,4 +1,4 @@
-import type { LlmConfig, Paper, Report, Run, RunListItem } from "./types";
+import type { AppSettings, AppSettingsUpdate, ArxivInfo, AvailableRun, ComparisonRun, KnowledgePaper, KnowledgeSearchResult, LlmConfig, Paper, PwcLink, QaMessage, Report, Run, RunListItem } from "./types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 
@@ -13,7 +13,7 @@ export async function uploadPaper(file: File): Promise<Paper> {
 
   if (!response.ok) {
     const body = await response.json().catch(() => null);
-    throw new Error(formatApiError(body?.detail ?? "Upload failed."));
+    throw new Error(formatApiError(body?.detail ?? "上传失败。"));
   }
 
   return response.json();
@@ -26,7 +26,7 @@ export async function startAnalysis(paperId: string): Promise<Run> {
 
   if (!response.ok) {
     const body = await response.json().catch(() => null);
-    throw new Error(formatApiError(body?.detail ?? "Analysis failed."));
+    throw new Error(formatApiError(body?.detail ?? "分析启动失败。"));
   }
 
   return response.json();
@@ -37,7 +37,20 @@ export async function getRun(runId: string): Promise<Run> {
 
   if (!response.ok) {
     const body = await response.json().catch(() => null);
-    throw new Error(formatApiError(body?.detail ?? "Failed to load run."));
+    throw new Error(formatApiError(body?.detail ?? "任务状态加载失败。"));
+  }
+
+  return response.json();
+}
+
+export async function deleteRun(runId: string): Promise<Run> {
+  const response = await fetch(`${API_BASE_URL}/api/runs/${runId}`, {
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(formatApiError(body?.detail ?? "删除分析记录失败。"));
   }
 
   return response.json();
@@ -56,7 +69,7 @@ export async function listRuns(options: { paperId?: string; limit?: number } = {
 
   if (!response.ok) {
     const body = await response.json().catch(() => null);
-    throw new Error(formatApiError(body?.detail ?? "Failed to load runs."));
+    throw new Error(formatApiError(body?.detail ?? "最近分析加载失败。"));
   }
 
   return response.json();
@@ -67,7 +80,7 @@ export async function getReport(runId: string): Promise<Report> {
 
   if (!response.ok) {
     const body = await response.json().catch(() => null);
-    throw new Error(formatApiError(body?.detail ?? "Failed to load report."));
+    throw new Error(formatApiError(body?.detail ?? "报告加载失败。"));
   }
 
   return response.json();
@@ -81,12 +94,16 @@ export function getReportMarkdownUrl(runId: string): string {
   return `${API_BASE_URL}/api/runs/${runId}/report.md`;
 }
 
+export function getSkeletonUrl(runId: string): string {
+  return `${API_BASE_URL}/api/runs/${runId}/skeleton`;
+}
+
 export async function getLlmConfig(): Promise<LlmConfig> {
   const response = await fetch(`${API_BASE_URL}/api/llm/config`);
 
   if (!response.ok) {
     const body = await response.json().catch(() => null);
-    throw new Error(formatApiError(body?.detail ?? "Failed to load LLM config."));
+    throw new Error(formatApiError(body?.detail ?? "模型配置加载失败。"));
   }
 
   return response.json();
@@ -103,10 +120,205 @@ export async function updateLlmConfig(defaultModel: string): Promise<LlmConfig> 
 
   if (!response.ok) {
     const body = await response.json().catch(() => null);
-    throw new Error(formatApiError(body?.detail ?? "Failed to update LLM config."));
+    throw new Error(formatApiError(body?.detail ?? "模型配置更新失败。"));
   }
 
   return response.json();
+}
+
+export async function getAppSettings(): Promise<AppSettings> {
+  const response = await fetch(`${API_BASE_URL}/api/settings`);
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(formatApiError(body?.detail ?? "设置加载失败。"));
+  }
+
+  return response.json();
+}
+
+export async function updateAppSettings(payload: AppSettingsUpdate): Promise<AppSettings> {
+  const response = await fetch(`${API_BASE_URL}/api/settings`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(formatApiError(body?.detail ?? "设置保存失败。"));
+  }
+
+  return response.json();
+}
+
+export async function getQaHistory(runId: string): Promise<QaMessage[]> {
+  const response = await fetch(`${API_BASE_URL}/api/runs/${runId}/qa`);
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(formatApiError(body?.detail ?? "对话历史加载失败。"));
+  }
+
+  return response.json();
+}
+
+export async function askQuestion(runId: string, question: string): Promise<QaMessage[]> {
+  const response = await fetch(`${API_BASE_URL}/api/runs/${runId}/qa`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ question }),
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(formatApiError(body?.detail ?? "提问失败。"));
+  }
+
+  return response.json();
+}
+
+export interface StreamEvent {
+  type: "token" | "done";
+  content?: string;
+  message_id?: string;
+}
+
+export async function* askQuestionStream(
+  runId: string,
+  question: string,
+): AsyncGenerator<StreamEvent, void, unknown> {
+  const response = await fetch(`${API_BASE_URL}/api/runs/${runId}/qa/stream`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ question }),
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(formatApiError(body?.detail ?? "提问失败。"));
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error("Response body is not readable.");
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith("data: ")) continue;
+        const jsonStr = trimmed.slice(6);
+        try {
+          yield JSON.parse(jsonStr) as StreamEvent;
+        } catch {
+          // skip malformed SSE lines
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+export async function getAvailableRuns(): Promise<AvailableRun[]> {
+  const response = await fetch(`${API_BASE_URL}/api/compare/available`);
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(formatApiError(body?.detail ?? "可比较任务加载失败。"));
+  }
+
+  return response.json();
+}
+
+export async function compareRuns(runIds: string[]): Promise<ComparisonRun[]> {
+  const params = new URLSearchParams();
+  params.set("run_ids", runIds.join(","));
+  const response = await fetch(`${API_BASE_URL}/api/compare?${params.toString()}`);
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(formatApiError(body?.detail ?? "比较失败。"));
+  }
+
+  return response.json();
+}
+
+export async function importArxiv(arxivId: string): Promise<Paper> {
+  const response = await fetch(`${API_BASE_URL}/api/arxiv/import`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ arxiv_id: arxivId }),
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(formatApiError(body?.detail ?? "arXiv 导入失败。"));
+  }
+
+  return response.json();
+}
+
+export async function getArxivInfo(arxivId: string): Promise<ArxivInfo> {
+  const response = await fetch(`${API_BASE_URL}/api/arxiv/${encodeURIComponent(arxivId)}/versions`);
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(formatApiError(body?.detail ?? "arXiv 版本加载失败。"));
+  }
+
+  return response.json();
+}
+
+export async function searchKnowledge(query: string, topK: number = 10): Promise<KnowledgeSearchResult[]> {
+  const params = new URLSearchParams({ q: query, top_k: String(topK) });
+  const response = await fetch(`${API_BASE_URL}/api/knowledge/search?${params.toString()}`);
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(formatApiError(body?.detail ?? "知识库搜索失败。"));
+  }
+
+  return response.json();
+}
+
+export async function getKnowledgePapers(): Promise<KnowledgePaper[]> {
+  const response = await fetch(`${API_BASE_URL}/api/knowledge/papers`);
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(formatApiError(body?.detail ?? "知识库论文加载失败。"));
+  }
+
+  return response.json();
+}
+
+export async function getPwcLinks(runId: string): Promise<PwcLink[]> {
+  const response = await fetch(`${API_BASE_URL}/api/runs/${runId}/pwc-links`);
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(formatApiError(body?.detail ?? "Papers With Code 链接加载失败。"));
+  }
+
+  const data = await response.json();
+  return data.links ?? [];
 }
 
 function formatApiError(detail: unknown): string {
@@ -116,5 +328,5 @@ function formatApiError(detail: unknown): string {
   if (Array.isArray(detail)) {
     return detail.map((item) => item?.msg ?? JSON.stringify(item)).join("; ");
   }
-  return "Request failed.";
+  return "请求失败。";
 }

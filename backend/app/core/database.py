@@ -3,17 +3,21 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 from app.core.config import get_settings
 
 DEFAULT_MODEL_SETTING_KEY = "default_model"
+UI_LANGUAGE_SETTING_KEY = "ui_language"
+REPORT_LANGUAGE_SETTING_KEY = "report_language"
+SUPPORTED_LANGUAGES = {"zh", "en"}
+STALE_RUN_ERROR_MESSAGE = "任务中断或超时，请重新启动分析。"
 
 
 def utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _json(value: Any) -> str:
@@ -72,6 +76,7 @@ def init_db() -> None:
                 started_at TEXT,
                 completed_at TEXT,
                 created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
                 FOREIGN KEY (paper_id) REFERENCES papers(id)
             );
 
@@ -107,10 +112,32 @@ def init_db() -> None:
                 value TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS qa_messages (
+                id TEXT PRIMARY KEY,
+                run_id TEXT NOT NULL,
+                paper_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (run_id) REFERENCES analysis_runs(id),
+                FOREIGN KEY (paper_id) REFERENCES papers(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS paper_embeddings (
+                id TEXT PRIMARY KEY,
+                paper_id TEXT NOT NULL,
+                chunk_index INTEGER NOT NULL,
+                embedding BLOB NOT NULL,
+                FOREIGN KEY (paper_id) REFERENCES papers(id)
+            );
             """
         )
         _ensure_analysis_run_columns(conn)
         _ensure_default_model_setting(conn)
+        _ensure_language_settings(conn)
+        _ensure_paper_columns(conn)
+        recover_stale_runs(conn)
 
 
 def _ensure_analysis_run_columns(conn: sqlite3.Connection) -> None:
@@ -121,6 +148,46 @@ def _ensure_analysis_run_columns(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE analysis_runs ADD COLUMN current_step TEXT")
     if "progress_percent" not in columns:
         conn.execute("ALTER TABLE analysis_runs ADD COLUMN progress_percent INTEGER NOT NULL DEFAULT 0")
+    if "updated_at" not in columns:
+        conn.execute("ALTER TABLE analysis_runs ADD COLUMN updated_at TEXT")
+    conn.execute(
+        """
+        UPDATE analysis_runs
+        SET updated_at = COALESCE(updated_at, completed_at, started_at, created_at, ?)
+        WHERE updated_at IS NULL OR updated_at = ''
+        """,
+        (utc_now(),),
+    )
+
+
+def recover_stale_runs(conn: sqlite3.Connection | None = None) -> int:
+    settings = get_settings()
+    if settings.run_stale_after_minutes <= 0:
+        return 0
+    cutoff = (datetime.now(UTC) - timedelta(minutes=settings.run_stale_after_minutes)).isoformat()
+    now = utc_now()
+
+    def execute(connection: sqlite3.Connection) -> int:
+        cursor = connection.execute(
+            """
+            UPDATE analysis_runs
+            SET status = ?,
+                error_message = ?,
+                current_step = ?,
+                progress_percent = CASE WHEN progress_percent >= 100 THEN 99 ELSE progress_percent END,
+                completed_at = COALESCE(completed_at, ?),
+                updated_at = ?
+            WHERE status IN ('pending', 'running')
+              AND COALESCE(updated_at, started_at, created_at) < ?
+            """,
+            ("failed", STALE_RUN_ERROR_MESSAGE, "failed", now, now, cutoff),
+        )
+        return cursor.rowcount
+
+    if conn is not None:
+        return execute(conn)
+    with get_connection() as local_conn:
+        return execute(local_conn)
 
 
 def _ensure_default_model_setting(conn: sqlite3.Connection) -> None:
@@ -142,6 +209,36 @@ def _ensure_default_model_setting(conn: sqlite3.Connection) -> None:
             updated_at = excluded.updated_at
         """,
         (DEFAULT_MODEL_SETTING_KEY, configured_default, utc_now()),
+    )
+
+
+def _ensure_language_settings(conn: sqlite3.Connection) -> None:
+    _ensure_setting(conn, UI_LANGUAGE_SETTING_KEY, "zh", SUPPORTED_LANGUAGES)
+    _ensure_setting(conn, REPORT_LANGUAGE_SETTING_KEY, "en", SUPPORTED_LANGUAGES)
+
+
+def _ensure_paper_columns(conn: sqlite3.Connection) -> None:
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(papers)").fetchall()}
+    if "arxiv_id" not in columns:
+        conn.execute("ALTER TABLE papers ADD COLUMN arxiv_id TEXT")
+
+
+def _ensure_setting(conn: sqlite3.Connection, key: str, default_value: str, allowed_values: set[str]) -> None:
+    row = conn.execute(
+        "SELECT value FROM app_settings WHERE key = ?",
+        (key,),
+    ).fetchone()
+    if row and row["value"] in allowed_values:
+        return
+    conn.execute(
+        """
+        INSERT INTO app_settings (key, value, updated_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(key) DO UPDATE SET
+            value = excluded.value,
+            updated_at = excluded.updated_at
+        """,
+        (key, default_value, utc_now()),
     )
 
 
@@ -184,18 +281,58 @@ def set_default_model(model_name: str) -> str:
     return normalized_model
 
 
-def create_paper(filename: str, file_path: Path, file_size: int, title: str | None = None) -> dict[str, Any]:
+def get_ui_language() -> str:
+    return _get_language_setting(UI_LANGUAGE_SETTING_KEY, "zh")
+
+
+def set_ui_language(language: str) -> str:
+    return _set_language_setting(UI_LANGUAGE_SETTING_KEY, language)
+
+
+def get_report_language() -> str:
+    return _get_language_setting(REPORT_LANGUAGE_SETTING_KEY, "en")
+
+
+def set_report_language(language: str) -> str:
+    return _set_language_setting(REPORT_LANGUAGE_SETTING_KEY, language)
+
+
+def _get_language_setting(key: str, default_value: str) -> str:
+    stored_language = get_app_setting(key)
+    if stored_language in SUPPORTED_LANGUAGES:
+        return stored_language
+    set_app_setting(key, default_value)
+    return default_value
+
+
+def _set_language_setting(key: str, language: str) -> str:
+    normalized_language = language.strip().lower()
+    if normalized_language not in SUPPORTED_LANGUAGES:
+        raise ValueError("Language must be zh or en.")
+    set_app_setting(key, normalized_language)
+    return normalized_language
+
+
+def create_paper(
+    filename: str,
+    file_path: Path,
+    file_size: int,
+    title: str | None = None,
+    arxiv_id: str | None = None,
+) -> dict[str, Any]:
     paper_id = str(uuid.uuid4())
     created_at = utc_now()
     with get_connection() as conn:
         conn.execute(
             """
-            INSERT INTO papers (id, title, filename, file_path, file_size, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO papers (id, title, filename, file_path, file_size, created_at, arxiv_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (paper_id, title, filename, str(file_path), file_size, created_at),
+            (paper_id, title, filename, str(file_path), file_size, created_at, arxiv_id),
         )
-    return get_paper(paper_id)
+    result = get_paper(paper_id)
+    assert result is not None
+    return result
 
 
 def list_papers() -> list[dict[str, Any]]:
@@ -224,13 +361,15 @@ def create_run(paper_id: str, model_name: str | None = None) -> dict[str, Any]:
             """
             INSERT INTO analysis_runs (
                 id, paper_id, status, model_name, current_step, progress_percent,
-                started_at, created_at
+                started_at, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (run_id, paper_id, "pending", selected_model, "queued", 0, now, now),
+            (run_id, paper_id, "pending", selected_model, "queued", 0, now, now, now),
         )
-    return get_run(run_id)
+    result = get_run(run_id)
+    assert result is not None
+    return result
 
 
 def update_run_status(
@@ -242,6 +381,7 @@ def update_run_status(
     progress_percent: int | None = None,
 ) -> None:
     completed_at = utc_now() if completed else None
+    updated_at = utc_now()
     if progress_percent is not None:
         progress_percent = max(0, min(100, progress_percent))
     with get_connection() as conn:
@@ -252,10 +392,11 @@ def update_run_status(
                 error_message = ?,
                 current_step = COALESCE(?, current_step),
                 progress_percent = COALESCE(?, progress_percent),
-                completed_at = COALESCE(?, completed_at)
+                completed_at = COALESCE(?, completed_at),
+                updated_at = ?
             WHERE id = ?
             """,
-            (status, error_message, current_step, progress_percent, completed_at, run_id),
+            (status, error_message, current_step, progress_percent, completed_at, updated_at, run_id),
         )
 
 
@@ -385,3 +526,77 @@ def get_report(run_id: str) -> dict[str, Any] | None:
     with get_connection() as conn:
         row = conn.execute("SELECT * FROM reports WHERE run_id = ?", (run_id,)).fetchone()
     return dict(row) if row else None
+
+
+def delete_run(run_id: str) -> dict[str, Any] | None:
+    run = get_run(run_id)
+    if not run:
+        return None
+    with get_connection() as conn:
+        conn.execute("DELETE FROM qa_messages WHERE run_id = ?", (run_id,))
+        conn.execute("DELETE FROM reports WHERE run_id = ?", (run_id,))
+        conn.execute("DELETE FROM analysis_results WHERE run_id = ?", (run_id,))
+        conn.execute("DELETE FROM analysis_runs WHERE id = ?", (run_id,))
+    return run
+
+
+def save_qa_message(run_id: str, paper_id: str, role: str, content: str) -> dict[str, Any]:
+    message_id = str(uuid.uuid4())
+    now = utc_now()
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO qa_messages (id, run_id, paper_id, role, content, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (message_id, run_id, paper_id, role, content, now),
+        )
+    return {"id": message_id, "run_id": run_id, "paper_id": paper_id, "role": role, "content": content, "created_at": now}
+
+
+def get_qa_history(run_id: str) -> list[dict[str, Any]]:
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT * FROM qa_messages WHERE run_id = ? ORDER BY created_at ASC",
+            (run_id,),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def get_paper_chunks(paper_id: str) -> list[dict[str, Any]]:
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT * FROM paper_chunks WHERE paper_id = ? ORDER BY chunk_index ASC",
+            (paper_id,),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def save_embeddings(paper_id: str, embeddings: list[tuple[int, bytes]]) -> None:
+    with get_connection() as conn:
+        conn.execute("DELETE FROM paper_embeddings WHERE paper_id = ?", (paper_id,))
+        conn.executemany(
+            "INSERT INTO paper_embeddings (id, paper_id, chunk_index, embedding) VALUES (?, ?, ?, ?)",
+            [(str(uuid.uuid4()), paper_id, idx, emb) for idx, emb in embeddings],
+        )
+
+
+def get_all_embeddings() -> list[dict[str, Any]]:
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT pe.paper_id, pe.chunk_index, pe.embedding,
+                   pc.content, pc.section_title, pc.page_start, pc.page_end,
+                   p.title AS paper_title
+            FROM paper_embeddings pe
+            JOIN paper_chunks pc ON pe.paper_id = pc.paper_id AND pe.chunk_index = pc.chunk_index
+            JOIN papers p ON pe.paper_id = p.id
+            ORDER BY pe.paper_id, pe.chunk_index
+            """
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def delete_embeddings(paper_id: str) -> None:
+    with get_connection() as conn:
+        conn.execute("DELETE FROM paper_embeddings WHERE paper_id = ?", (paper_id,))

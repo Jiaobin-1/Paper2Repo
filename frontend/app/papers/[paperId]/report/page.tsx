@@ -1,17 +1,29 @@
-export default async function PaperReportPage({ params }: { params: Promise<{ paperId: string }> }) {
-  const { paperId } = await params;
+"use client";
+
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { listRuns } from "../../../../lib/api";
+
+export default function PaperReportRedirect({ params }: { params: Promise<{ paperId: string }> }) {
+  const router = useRouter();
+
+  useEffect(() => {
+    params.then(({ paperId }) => {
+      listRuns({ paperId, limit: 1 })
+        .then((runs) => {
+          if (runs.length > 0 && runs[0].status === "completed") {
+            router.replace(`/runs/${runs[0].id}`);
+          } else {
+            router.replace("/");
+          }
+        })
+        .catch(() => router.replace("/"));
+    });
+  }, [params, router]);
+
   return (
     <main className="stack">
-      <section>
-        <h1>Markdown 报告</h1>
-        <p className="muted">Paper ID: {paperId}</p>
-      </section>
-      <section className="panel stack">
-        <p className="muted">报告详情页已迁移到 `/runs/[runId]`。请从首页的最近分析列表进入具体 Run 报告。</p>
-        <a className="button secondary" href="/">
-          返回首页
-        </a>
-      </section>
+      <p className="muted">Redirecting...</p>
     </main>
   );
 }

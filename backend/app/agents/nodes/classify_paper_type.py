@@ -1,9 +1,16 @@
 from __future__ import annotations
 
 import re
+from typing import Literal, cast
 
 from app.agents.state import PaperAnalysisState
 from app.schemas.classification import PaperTypeClassification
+
+_Domain = Literal["llm", "agent", "rag", "nlp", "cv", "recommendation", "deep_learning", "multimodal", "other"]
+_PaperType = Literal["experimental", "system", "benchmark", "dataset", "theoretical", "survey"]
+_ReproMode = Literal["training_from_scratch", "fine_tuning", "inference_pipeline", "benchmark_evaluation", "ablation_reproduction", "not_recommended"]
+_Difficulty = Literal["low", "medium", "high", "very_high"]
+_Suitability = Literal["good", "partial", "poor"]
 
 
 def _word_match(term: str, text: str) -> bool:
@@ -106,11 +113,11 @@ def classify_paper_type_node(state: PaperAnalysisState) -> PaperAnalysisState:
         blockers.append("Paper type is not ideal for MVP reproduction planning")
 
     classification = PaperTypeClassification(
-        domain=domain,
-        paper_type=paper_type,
-        reproduction_mode=reproduction_mode,
-        difficulty=difficulty,
-        suitability_for_mvp=suitability,
+        domain=cast(_Domain, domain),
+        paper_type=cast(_PaperType, paper_type),
+        reproduction_mode=cast(_ReproMode, reproduction_mode),
+        difficulty=cast(_Difficulty, difficulty),
+        suitability_for_mvp=cast(_Suitability, suitability),
         reasons=[
             domain_reason,
             type_reason,

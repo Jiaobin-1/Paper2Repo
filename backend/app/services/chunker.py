@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.schemas.chunks import ChunkMetadata, ChunkedPaper, PaperChunk
+from app.schemas.chunks import ChunkedPaper, ChunkMetadata, PaperChunk
 from app.schemas.parsed import ParsedPaper, SectionCandidate
 
 

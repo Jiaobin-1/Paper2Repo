@@ -1,0 +1,15 @@
+node_modules
+.next
+__pycache__
+*.pyc
+.git
+.env
+*.db
+data/
+storage/
+.vscode
+.idea
+*.egg-info
+dist/
+build/
+.DS_Store

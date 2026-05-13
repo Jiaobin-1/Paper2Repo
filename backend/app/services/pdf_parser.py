@@ -5,7 +5,6 @@ from pathlib import Path
 
 from app.schemas.parsed import PageText, ParsedPaper, SectionCandidate
 
-
 SECTION_PATTERNS = [
     r"^\s*(abstract|introduction|related work|background|method|methodology|approach)\s*$",
     r"^\s*(experiments?|evaluation|results?|discussion|conclusion|limitations?)\s*$",
@@ -41,12 +40,15 @@ def parse_pdf(pdf_path: str | Path) -> ParsedPaper:
     sections: list[SectionCandidate] = []
     raw_parts: list[str] = []
 
-    with fitz.open(path) as document:
-        for index, page in enumerate(document, start=1):
-            text = page.get_text("text").strip()
-            page_texts.append(PageText(page_number=index, text=text))
-            raw_parts.append(text)
-            sections.extend(_find_section_candidates(index, text))
+    try:
+        with fitz.open(path) as document:
+            for index, page in enumerate(document, start=1):
+                text = page.get_text("text").strip()
+                page_texts.append(PageText(page_number=index, text=text))
+                raw_parts.append(text)
+                sections.extend(_find_section_candidates(index, text))
+    except Exception as exc:
+        raise RuntimeError("PDF parsing failed. Please confirm the uploaded file is a readable PDF.") from exc
 
     return ParsedPaper(
         raw_text="\n\n".join(part for part in raw_parts if part),

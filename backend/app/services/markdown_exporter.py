@@ -6,22 +6,17 @@ from app.schemas.metadata import PaperMetadata
 from app.schemas.method import MethodAnalysis
 from app.schemas.reproduction import ReproductionPlan
 from app.schemas.understanding import PaperUnderstanding
-
-
-def _bullets(items: list[str]) -> str:
-    if not items:
-        return "- 未在当前 PDF 片段中明确提取到。\n"
-    return "\n".join(f"- {item}" for item in items) + "\n"
-
-
-def _checkboxes(items: list[str]) -> str:
-    if not items:
-        return "- [ ] 未生成 checklist。\n"
-    return "\n".join(f"- [ ] {item}" for item in items) + "\n"
-
-
-def _value(value: str) -> str:
-    return value if value else "未在当前 PDF 片段中明确提取到。"
+from app.services.report_helpers import (
+    _bullets,
+    _checkboxes,
+    _evidence_table,
+    _experiment_matrix,
+    _label,
+    _missing_table,
+    _reading_tasks,
+    _value,
+)
+from app.services.report_lang import EN, ZH, Lang
 
 
 def build_markdown_report(
@@ -31,169 +26,231 @@ def build_markdown_report(
     method: MethodAnalysis,
     experiments: ExperimentAnalysis,
     reproduction: ReproductionPlan,
+    language: str = "zh",
 ) -> str:
-    modules = "\n".join(
-        "\n".join(
-            [
-                f"### {index}. {module.name}",
-                f"- 职责：{_value(module.responsibility)}",
-                f"- 输入：{', '.join(module.inputs) if module.inputs else '未明确'}",
-                f"- 输出：{', '.join(module.outputs) if module.outputs else '未明确'}",
-                f"- 实现要点：{'; '.join(module.implementation_notes) if module.implementation_notes else '未明确'}",
-            ]
-        )
-        for index, module in enumerate(method.modules, start=1)
-    ) or "未在当前 PDF 片段中明确拆出方法模块。"
+    lang = EN if language == "en" else ZH
+    return _build_report(metadata, classification, understanding, method, experiments, reproduction, lang)
 
-    reproduction_modules = "\n".join(
-        "\n".join(
-            [
-                f"### {index}. {module.name}",
-                f"- 目的：{_value(module.purpose)}",
-                f"- 输入：{', '.join(module.inputs) if module.inputs else '未明确'}",
-                f"- 输出：{', '.join(module.outputs) if module.outputs else '未明确'}",
-                f"- TODO：{'; '.join(module.todos) if module.todos else '未明确'}",
-            ]
-        )
-        for index, module in enumerate(reproduction.required_modules, start=1)
-    ) or "未生成必要模块。"
+
+def _build_report(
+    metadata: PaperMetadata,
+    classification: PaperTypeClassification,
+    understanding: PaperUnderstanding,
+    method: MethodAnalysis,
+    experiments: ExperimentAnalysis,
+    reproduction: ReproductionPlan,
+    lang: Lang,
+) -> str:
+    L = lang
+    not_spec = L.m_not_specified
+
+    modules = "\n".join(
+        "\n".join([
+            f"### {i}. {m.name}",
+            f"- {L.m_responsibility}：{_value(m.responsibility, L)}",
+            f"- {L.m_inputs}：{', '.join(m.inputs) if m.inputs else not_spec}",
+            f"- {L.m_outputs}：{', '.join(m.outputs) if m.outputs else not_spec}",
+            f"- {L.m_priority}：{_label(L.priority_labels, m.implementation_priority) if m.implementation_priority else not_spec}",
+            f"- {L.m_contract}：{m.interface_contract or not_spec}",
+            f"- {L.m_notes}：{'; '.join(m.implementation_notes) if m.implementation_notes else not_spec}",
+        ])
+        for i, m in enumerate(method.modules, start=1)
+    ) or L.no_modules
+
+    repro_modules = "\n".join(
+        "\n".join([
+            f"### {i}. {m.name}",
+            f"- {L.rm_purpose}：{_value(m.purpose, L)}",
+            f"- {L.m_inputs}：{', '.join(m.inputs) if m.inputs else not_spec}",
+            f"- {L.m_outputs}：{', '.join(m.outputs) if m.outputs else not_spec}",
+            f"- {L.rm_todos}：{'; '.join(m.todos) if m.todos else not_spec}",
+        ])
+        for i, m in enumerate(reproduction.required_modules, start=1)
+    ) or L.no_repro_modules
 
     datasets = "\n".join(
-        f"- **{dataset.name}**：{dataset.role or '实验数据集'}；说明：{dataset.notes or '未明确'}"
-        for dataset in experiments.datasets
-    ) or "- 未在当前 PDF 片段中明确提取到数据集。\n"
+        f"- **{d.name}**：{d.role or L.ds_role_default}；{L.ds_notes_label}：{d.notes or not_spec}"
+        for d in experiments.datasets
+    ) or L.no_datasets
 
     code_structure = "\n".join(
-        f"- `{item.path}` ({item.type})：{item.purpose}；TODO：{item.todo}"
+        f"- `{item.path}`（{_label(L.item_type_labels, item.type)}）：{item.purpose}；{L.cd_todo_label}：{item.todo}"
         for item in reproduction.code_structure
-    ) or "- 未生成代码目录骨架。"
+    ) or L.no_code
 
     steps = "\n".join(
-        f"{step.step}. **{step.title}**：{step.description} 输出：{step.expected_output or '未明确'}"
-        for step in reproduction.implementation_steps
-    ) or "1. 未生成实现步骤。"
+        f"{s.step}. **{s.title}**：{s.description} {L.st_output_label}：{s.expected_output or not_spec}"
+        for s in reproduction.implementation_steps
+    ) or L.no_steps
 
     risks = "\n".join(
-        f"- **{risk.impact}**：{risk.risk}；缓解：{risk.mitigation or '未明确'}"
-        for risk in reproduction.risk_points
-    ) or "- 未识别风险点。"
+        f"- **{_label(L.level_labels, r.impact)}**：{r.risk}；{L.rk_mitigation_label}：{r.mitigation or not_spec}"
+        for r in reproduction.risk_points
+    ) or L.no_risks
 
-    formulas = _bullets(method.key_formulas)
-    dependencies = _bullets(method.implementation_dependencies)
-    checklist = _checkboxes([item.item for item in reproduction.experiment_checklist])
+    evidence_refs = [
+        *understanding.evidence_refs,
+        *method.evidence_refs,
+        *experiments.evidence_refs,
+        *reproduction.evidence_refs,
+    ]
+    formulas = _bullets(method.key_formulas, L)
+    dependencies = _bullets(method.implementation_dependencies, L)
+    checklist = _checkboxes([item.item for item in reproduction.experiment_checklist], L)
+    acceptance = _checkboxes(reproduction.acceptance_criteria, L)
+
+    sep = "；" if L.lang_code == "zh" else "; "
 
     return f"""# {metadata.title}
 
-> Paper2Repo 目标：先把论文读懂，再把论文拆成可执行的最小复现计划。以下内容基于 PDF 文本、章节标题和关键词检索生成；缺失项会明确标注，避免伪造实现细节。
+{L.intro}
 
-## 1. 论文基本信息
+{L.h_audit}
 
-- 标题：{metadata.title}
-- 作者：{", ".join(metadata.authors) if metadata.authors else "未在当前 PDF 片段中明确提取到"}
-- 方向：{classification.domain}
-- 论文类型：{classification.paper_type}
-- 推荐复现方式：{classification.reproduction_mode}
-- 复现难度：{classification.difficulty}
-- MVP 适配度：{classification.suitability_for_mvp}
+- {L.h_repro_level}：{_label(L.level_labels, reproduction.feasibility_level)}
+- {L.h_audit_summary}：{_value(reproduction.audit_summary or reproduction.feasibility_summary, L)}
+- {L.h_first_step}：{_value(reproduction.recommended_first_experiment or reproduction.minimum_reproduction_goal, L)}
+- {L.h_biggest_blocker}：{sep.join(item.item for item in reproduction.blocking_missing_items[:3]) if reproduction.blocking_missing_items else L.no_blockers}
+- {L.h_confidence}：{_label(L.level_labels, reproduction.confidence)}
 
-### 类型判断依据
-{_bullets(classification.reasons)}
-### 可能资源需求
-{_bullets(classification.required_resources)}
-### 可能阻塞点
-{_bullets(classification.likely_blockers)}
+{L.h_blocking_gaps}
+{_missing_table(reproduction.blocking_missing_items, L)}
 
-## 2. 读懂论文
+{L.h_evidence_map}
+{_evidence_table(evidence_refs, L)}
 
-### 研究背景
-{_value(understanding.background)}
+{L.h_metadata}
 
-### 核心问题
-{_value(understanding.core_problem)}
+- {L.h_title}：{metadata.title}
+- {L.h_authors}：{", ".join(metadata.authors) if metadata.authors else L.no_value}
+- {L.h_domain}：{classification.domain}
+- {L.h_paper_type}：{_label(L.paper_type_labels, classification.paper_type)}
+- {L.h_repro_mode}：{_label(L.reproduction_mode_labels, classification.reproduction_mode)}
+- {L.h_difficulty}：{_label(L.level_labels, classification.difficulty)}
+- {L.h_mvp_suitability}：{_label(L.level_labels, classification.suitability_for_mvp)}
 
-### 主要贡献
-{_bullets(understanding.main_contributions)}
-### 整体思路
-{_value(understanding.overall_idea)}
+{L.h_class_reasons}
+{_bullets(classification.reasons, L)}
+{L.h_resources}
+{_bullets(classification.required_resources, L)}
+{L.h_blockers}
+{_bullets(classification.likely_blockers, L)}
 
-### 结论
-{_value(understanding.conclusion)}
+{L.h_understanding}
 
-### 局限性
-{_bullets(understanding.limitations)}
-### 适用场景
-{_bullets(understanding.applicable_scenarios)}
+{L.h_background}
+{_value(understanding.background, L)}
 
-## 3. 方法拆解
+{L.h_core_problem}
+{_value(understanding.core_problem, L)}
 
-### 方法整体框架
-{_value(method.system_framework or method.method_summary)}
+{L.h_contributions}
+{_bullets(understanding.main_contributions, L)}
+{L.h_overall_idea}
+{_value(understanding.overall_idea, L)}
 
-### 方法概述
-{_value(method.method_summary)}
+{L.h_conclusion}
+{_value(understanding.conclusion, L)}
 
-### 关键模块、输入输出与实现要点
+{L.h_limitations}
+{_bullets(understanding.limitations, L)}
+{L.h_scenarios}
+{_bullets(understanding.applicable_scenarios, L)}
+
+{L.h_assumptions}
+{_bullets(understanding.key_assumptions, L)}
+{L.h_reading_checklist}
+{_reading_tasks(understanding, L)}
+{L.h_understanding_gaps}
+{_missing_table(understanding.missing_items, L)}
+
+{L.h_method}
+
+{L.h_framework}
+{_value(method.system_framework or method.method_summary, L)}
+
+{L.h_method_summary}
+{_value(method.method_summary, L)}
+
+{L.h_modules}
 {modules}
 
-### 算法流程
-{_bullets([f"{step.step}. {step.name}: {step.description}" for step in method.algorithm_steps])}
-### 关键公式
+{L.h_algorithm}
+{_bullets([f"{s.step}. {s.name}: {s.description}" for s in method.algorithm_steps], L)}
+{L.h_formulas}
 {formulas}
-### 实现依赖
+{L.h_formula_gaps}
+{_bullets(method.formula_or_pseudocode_gaps, L)}
+{L.h_interfaces}
+{_bullets(method.implementation_interfaces, L)}
+{L.h_dependencies}
 {dependencies}
+{L.h_method_gaps}
+{_missing_table(method.missing_items, L)}
 
-## 4. 实验分析
+{L.h_experiments}
 
-### 数据集
+{L.h_matrix}
+{_experiment_matrix(experiments, L)}
+
+{L.h_datasets}
 {datasets}
-### Baseline
-{_bullets(experiments.baselines)}
-### Metrics
-{_bullets(experiments.metrics)}
-### 实验设置 / 训练细节
-{_bullets(experiments.training_details)}
-### 评价协议
-{_value(experiments.evaluation_protocol)}
+{L.h_baselines}
+{_bullets(experiments.baselines, L)}
+{L.h_metrics}
+{_bullets(experiments.metrics, L)}
+{L.h_training}
+{_bullets(experiments.training_details, L)}
+{L.h_eval_protocol}
+{_value(experiments.evaluation_protocol, L)}
 
-### 主要结果
-{_bullets(experiments.main_results)}
-### 消融实验
-{_bullets(experiments.ablation_studies)}
+{L.h_main_results}
+{_bullets(experiments.main_results, L)}
+{L.h_ablation}
+{_bullets(experiments.ablation_studies, L)}
+{L.h_experiment_gaps}
+{_missing_table(experiments.missing_items, L)}
 
-## 5. 复现规划
+{L.h_plan}
 
-### 复现可行性
-- 等级：{reproduction.feasibility_level}
-- 说明：{_value(reproduction.feasibility_summary)}
+{L.h_feasibility}
+- {L.h_feasibility_level}：{_label(L.level_labels, reproduction.feasibility_level)}
+- {L.h_feasibility_summary}：{_value(reproduction.feasibility_summary, L)}
 
-### 最小复现目标
-{_value(reproduction.minimum_reproduction_goal)}
+{L.h_min_goal}
+{_value(reproduction.minimum_reproduction_goal, L)}
 
-### 复现范围
-{_bullets(reproduction.reproduction_scope)}
-### 必要模块
-{reproduction_modules}
+{L.h_first_exp}
+{_value(reproduction.recommended_first_experiment, L)}
 
-### 数据计划
-{_bullets(reproduction.dataset_plan)}
-### 评价计划
-{_bullets(reproduction.evaluation_plan)}
+{L.h_scope}
+{_bullets(reproduction.reproduction_scope, L)}
+{L.h_req_modules}
+{repro_modules}
 
-### 建议代码目录骨架
+{L.h_dataset_plan}
+{_bullets(reproduction.dataset_plan, L)}
+{L.h_eval_plan}
+{_bullets(reproduction.evaluation_plan, L)}
+
+{L.h_code_skeleton}
 {code_structure}
 
-### 实现步骤
+{L.h_impl_steps}
 {steps}
 
-### 风险点
+{L.h_acceptance}
+{acceptance}
+
+{L.h_risks}
 {risks}
 
-### 缺失信息
-{_bullets(reproduction.missing_information)}
-### 第一版简化策略
-{_bullets(reproduction.suggested_simplifications)}
+{L.h_missing_info}
+{_bullets(reproduction.missing_information, L)}
+{L.h_simplifications}
+{_bullets(reproduction.suggested_simplifications, L)}
 
-## 6. 实验 Checklist
+{L.h_checklist}
 
 {checklist}
 """

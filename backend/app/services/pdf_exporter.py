@@ -12,7 +12,6 @@ from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from reportlab.pdfbase.pdfmetrics import registerFont, stringWidth
 from reportlab.pdfgen.canvas import Canvas
 
-
 PDF_FONT_NAME = "STSong-Light"
 PAGE_WIDTH, PAGE_HEIGHT = A4
 LEFT_MARGIN = 18 * mm

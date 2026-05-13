@@ -1,207 +1,233 @@
 # Paper2Repo
 
-Paper2Repo 是一个面向 AI 论文阅读与复现规划的本地 MVP。用户上传论文 PDF 后，系统会解析论文、切分 chunk、运行 LangGraph workflow，并生成结构化论文理解结果和 Markdown 复现规划报告。
+[![CI](https://github.com/YOUR_USERNAME/Paper2Repo/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_USERNAME/Paper2Repo/actions/workflows/ci.yml)
 
-第一版目标是把“读懂论文 -> 复现论文”的本地工作流跑通，不做联网搜索、不做复杂向量检索、不自动生成完整复现代码仓库。
+Paper2Repo 是一个面向 AI 论文阅读与复现规划的本地工具。用户上传论文 PDF 后，系统会解析论文、运行 10 节点 LangGraph 分析流水线，生成结构化论文理解结果和 Markdown/PDF 复现规划报告，并支持基于论文内容的追问对话、代码骨架生成、论文知识库语义搜索等高级功能。
+
+## 核心功能
+
+- **PDF 上传与解析**：拖拽上传，PyMuPDF 提取文本，自动检测章节结构
+- **arXiv 导入**：输入 arXiv ID 或 URL，自动下载 PDF 并启动分析
+- **10 节点分析流水线**：元信息提取 → 论文分类 → 方法拆解 → 实验分析 → 复现规划 → 报告生成
+- **结构化复现报告**：中英双语 Markdown/PDF 报告，含方法模块、实验矩阵、风险点、检查清单
+- **追问对话 (Q&A)**：报告生成后可就论文提问，支持 SSE 流式输出，超长对话自动摘要
+- **代码骨架生成**：基于复现计划自动生成项目骨架 zip，含目录结构、代码模板、README、PLAN.md
+- **论文知识库**：所有已分析论文自动建立向量索引，支持跨论文语义搜索
+- **多论文比较**：选择 2-4 篇已完成报告进行结构化对比
+- **Papers With Code**：基于分析结果推荐相关论文和代码资源链接
+- **向量检索**：sentence-transformers 嵌入检索，60% 语义 + 40% 关键词混合打分
+- **双语支持**：界面语言和报告语言独立配置（中文/英文）
+- **响应式设计**：移动端适配，报告全屏查看
+- **节点级容错**：分析节点失败不中断流程，失败节点写入报告附录
 
 ## Tech Stack
 
-- Backend: FastAPI
-- Frontend: Next.js
-- Agent orchestration: LangGraph
-- Database: SQLite
-- PDF parser: PyMuPDF
-- Structured output: Pydantic
-- LLM API: OpenAI-compatible API from environment variables
-- Retrieval: section title + keyword retrieval
+| 层级 | 技术 |
+|------|------|
+| Backend | FastAPI + Pydantic v2 |
+| Agent | LangGraph (10-node StateGraph) |
+| Database | SQLite (WAL mode) |
+| PDF | PyMuPDF |
+| LLM | OpenAI-compatible API (可选) |
+| Embeddings | sentence-transformers (all-MiniLM-L6-v2) |
+| Frontend | Next.js 16 + React 19 + TypeScript |
+| Testing | pytest (162) + vitest (26) + Playwright (20) |
+| Linting | ruff + mypy + tsc |
 
-## Backend Quick Start
+## Quick Start
 
-本机默认使用 `agent-learning` conda 环境测试后端：
-
-```bash
-conda run -n agent-learning python -m pip install -r backend/requirements.txt
-cd backend
-conda run -n agent-learning python -m uvicorn app.main:app --reload
-```
-
-检查服务：
-
-```bash
-curl http://127.0.0.1:8000/health
-```
-
-## Environment
-
-复制 `.env.example` 为 `.env`，按需填写：
-
-```bash
-OPENAI_API_KEY=
-OPENAI_BASE_URL=https://api.openai.com/v1
-OPENAI_MODEL=gpt-4o-mini
-OPENAI_MODEL_OPTIONS=gpt-4o-mini,gpt-4o,deepseek-chat
-
-DATABASE_URL=sqlite:///./data/paper2repo.db
-UPLOAD_DIR=./storage/uploads
-REPORT_DIR=./storage/reports
-```
-
-当前 MVP 已接入 OpenAI-compatible 结构化输出入口。配置 `OPENAI_API_KEY` 后，核心分析节点会优先调用 LLM 生成符合 Pydantic schema 的 JSON；未配置时会使用基于检索片段的本地 fallback，保证流程仍可跑通。
-
-### 接入自己的 OpenAI-compatible LLM
-
-在项目根目录创建 `.env`，不要放到 `backend/` 里面：
+### 1. 环境配置
 
 ```bash
 cp .env.example .env
+# 编辑 .env，填写 OPENAI_API_KEY（可选，不填则使用本地 fallback）
 ```
 
-填写你的服务商配置：
-
-```bash
-OPENAI_API_KEY=你的 API Key
-OPENAI_BASE_URL=https://你的服务商地址/v1
-OPENAI_MODEL=你的模型名
-OPENAI_MODEL_OPTIONS=模型名1,模型名2,模型名3
-```
-
-示例：
-
-```bash
-# Example only. Use the exact base URL and model name from your provider.
-OPENAI_API_KEY=sk-xxx
-OPENAI_BASE_URL=https://api.example.com/v1
-OPENAI_MODEL=deepseek-chat
-OPENAI_MODEL_OPTIONS=deepseek-chat,deepseek-reasoner
-```
-
-修改 `.env` 后需要重启后端，因为配置会在应用启动时读取：
+### 2. 启动后端
 
 ```bash
 cd backend
-conda run -n agent-learning python -m uvicorn app.main:app --reload
+pip install -r requirements.txt
+python -m uvicorn app.main:app --reload
+# Health check: curl http://127.0.0.1:8000/health
 ```
 
-如果你的服务商兼容 OpenAI Chat Completions，Paper2Repo 会通过 `OPENAI_BASE_URL`、`OPENAI_API_KEY` 和当前默认模型调用它。`OPENAI_MODEL` 是首次默认模型，`OPENAI_MODEL_OPTIONS` 是前端下拉框可选模型列表；如果不配置 `OPENAI_MODEL_OPTIONS`，前端只会显示 `OPENAI_MODEL`。
+### 3. 启动前端
 
-前端会读取后端的 `GET /api/llm/config`，显示：
-
-```text
-LLM 是否已配置
-当前 base_url
-当前默认模型
-可选模型列表
+```bash
+cd frontend
+npm install
+npm run dev
 ```
 
-在前端切换模型后，后端会保存为全局默认模型，后续新启动的 run 会使用该模型；已经运行中的 run 不受影响。每个 run 的实际模型会通过 `GET /api/runs/{run_id}` 的 `model_name` 字段返回。
+### 4. 使用
+
+打开 `http://localhost:3000`，按页面流程操作：
+
+```
+上传 PDF / arXiv 导入 → 选择模型 → 启动分析 → 查看进度 → 查看报告
+→ 追问对话 / 下载代码骨架 / 搜索知识库 / 比较多篇论文
+```
+
+## 环境变量
+
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `OPENAI_API_KEY` | LLM API Key（可选） | 空（使用 fallback） |
+| `OPENAI_BASE_URL` | API 地址 | `https://api.openai.com/v1` |
+| `OPENAI_MODEL` | 默认模型 | `gpt-4o-mini` |
+| `OPENAI_MODEL_OPTIONS` | 前端可选模型列表 | `gpt-4o-mini,gpt-4o` |
+| `DATABASE_URL` | SQLite 路径 | `sqlite:///./data/paper2repo.db` |
+| `UPLOAD_DIR` | 上传目录 | `./storage/uploads` |
+| `REPORT_DIR` | 报告目录 | `./storage/reports` |
+| `UPLOAD_MAX_MB` | 上传大小限制 | `50` |
+| `RUN_STALE_AFTER_MINUTES` | 任务超时（分钟） | `60` |
 
 ## API
 
-- `GET /health`
-- `POST /api/papers/upload`
-- `GET /api/papers`
-- `GET /api/papers/{paper_id}`
-- `POST /api/papers/{paper_id}/runs`
-- `GET /api/llm/config`
-- `PUT /api/llm/config`
-- `GET /api/runs/{run_id}`
-- `GET /api/runs`
-- `GET /api/runs/{run_id}/analysis`
-- `GET /api/runs/{run_id}/report`
-- `GET /api/runs/{run_id}/report.md`
-- `GET /api/runs/{run_id}/report.pdf`
+完整 API 文档启动后访问 `http://127.0.0.1:8000/docs`（Swagger UI）。
 
-## Workflow
+主要端点：
 
-```text
-parse_pdf_node
--> chunk_paper_node
--> extract_metadata_node
--> classify_paper_type_node
--> understand_paper_node
--> analyze_method_node
--> analyze_experiments_node
--> plan_reproduction_node
--> generate_report_node
--> persist_result_node
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `POST` | `/api/papers/upload` | 上传 PDF |
+| `POST` | `/api/papers/{paper_id}/runs` | 启动分析 |
+| `GET` | `/api/runs/{run_id}` | 查询任务状态 |
+| `GET` | `/api/runs/{run_id}/report` | 获取报告 |
+| `GET` | `/api/runs/{run_id}/report.md` | 下载 Markdown |
+| `GET` | `/api/runs/{run_id}/report.pdf` | 下载 PDF |
+| `GET` | `/api/runs/{run_id}/skeleton` | 下载代码骨架 zip |
+| `POST` | `/api/runs/{run_id}/qa` | 追问对话 |
+| `POST` | `/api/runs/{run_id}/qa/stream` | 追问对话 (SSE 流式) |
+| `GET` | `/api/runs/{run_id}/qa` | 对话历史 |
+| `GET` | `/api/runs/{run_id}/pwc-links` | Papers With Code 推荐 |
+| `POST` | `/api/arxiv/import` | arXiv 论文导入 |
+| `GET` | `/api/arxiv/{id}/versions` | arXiv 版本列表 |
+| `GET` | `/api/compare` | 多论文比较 |
+| `GET` | `/api/compare/available` | 可比较任务列表 |
+| `GET` | `/api/knowledge/search` | 知识库语义搜索 |
+| `GET` | `/api/knowledge/papers` | 知识库已索引论文 |
+| `GET/PUT` | `/api/settings` | 系统设置 |
+
+## 分析流水线
+
+```
+parse_pdf → chunk_paper → extract_metadata → classify_paper_type
+→ understand_paper → analyze_method → analyze_experiments
+→ plan_reproduction → generate_report → persist_result
 ```
 
-`retrieve_context` 是工具函数，不进入主流程。第一版只做章节标题和关键词检索。
+- **关键节点**（parse_pdf, chunk_paper）：失败时中断流程
+- **分析节点**（understand ~ plan）：失败时跳过，后续继续
+- **报告生成**：即使部分失败，仍生成部分报告 + 错误附录
+- **向量索引**：`persist_result` 完成后自动将 chunk 嵌入写入 `paper_embeddings` 表
 
-## Local Demo Flow
+## 页面路由
 
-1. 启动后端：
+| 路径 | 说明 |
+|------|------|
+| `/` | 首页：上传、运行历史、工作流 |
+| `/arxiv` | arXiv 论文导入 |
+| `/knowledge` | 论文知识库语义搜索 |
+| `/compare` | 多论文比较 |
+| `/settings` | 设置（语言、模型） |
+| `/runs/[runId]` | 报告详情 + Q&A + 代码骨架下载 |
+| `/papers/[paperId]` | 论文详情 + 运行列表 |
+
+## 开发
+
+### 后端测试
 
 ```bash
 cd backend
-conda run -n agent-learning python -m uvicorn app.main:app --reload
+pip install -r requirements-dev.txt
+
+# 全部测试 (162 tests)
+python -m pytest tests/ -v
+
+# Lint
+python -m ruff check app/ tests/
+
+# Type check
+python -m mypy app/ --ignore-missing-imports
 ```
 
-2. 启动前端：
+### 前端测试
 
 ```bash
 cd frontend
-npm install
-npm run dev
+
+# Type check
+npm run lint
+
+# 单元测试 (26 tests, vitest)
+npm run test:unit
+
+# E2E 测试 (20 tests, Playwright)
+npx playwright install chromium
+npx playwright test
 ```
 
-3. 打开 `http://localhost:3000`，按页面流程操作：
+### CI
 
-```text
-上传 PDF
--> 看到 paper_id
--> 选择分析模型
--> 点击启动分析
--> 立即看到 run_id
--> 前端轮询 run 状态并展示 workflow 进度
--> completed 后自动展示 Markdown 报告
--> 进入报告详情页，下载 Markdown 或 PDF
+推送到 `main` 分支或创建 PR 时，GitHub Actions 自动运行：
+- 后端：ruff + mypy + pytest
+- 前端：tsc + vitest + playwright
+
+## 项目结构
+
+```
+Paper2Repo/
+├── backend/
+│   ├── app/
+│   │   ├── agents/          # LangGraph 流水线
+│   │   │   ├── nodes/       # 10 个分析节点
+│   │   │   ├── graph.py     # 流水线编排
+│   │   │   ├── state.py     # TypedDict 状态
+│   │   │   └── prompts.py   # LLM 提示词
+│   │   ├── api/             # FastAPI 路由
+│   │   │   ├── routes_papers.py    # 论文上传
+│   │   │   ├── routes_runs.py      # 运行管理 + 报告 + 代码骨架
+│   │   │   ├── routes_qa.py        # Q&A 对话 (流式)
+│   │   │   ├── routes_arxiv.py     # arXiv 导入
+│   │   │   ├── routes_compare.py   # 多论文比较
+│   │   │   ├── routes_knowledge.py # 知识库搜索
+│   │   │   ├── routes_pwc.py       # Papers With Code
+│   │   │   ├── routes_llm.py       # LLM 配置
+│   │   │   └── routes_settings.py  # 系统设置
+│   │   ├── core/            # 配置、数据库
+│   │   ├── schemas/         # Pydantic 模型
+│   │   └── services/        # 业务逻辑
+│   │       ├── code_skeleton.py    # 代码骨架生成
+│   │       ├── arxiv_client.py     # arXiv API 客户端
+│   │       ├── qa_service.py       # Q&A 服务 (含对话摘要)
+│   │       ├── retrieval.py        # 检索 + 向量索引
+│   │       └── ...
+│   ├── tests/               # 162 个测试
+│   └── requirements.txt
+├── frontend/
+│   ├── app/
+│   │   ├── components/
+│   │   │   ├── upload/      # PDF 上传组件
+│   │   │   ├── report/      # 报告、Q&A、代码骨架、PwC
+│   │   │   ├── history/     # 运行历史
+│   │   │   ├── knowledge/   # 知识库搜索
+│   │   │   └── shared/      # 共享组件
+│   │   ├── arxiv/           # arXiv 导入页
+│   │   ├── knowledge/       # 知识库页
+│   │   ├── compare/         # 多论文比较页
+│   │   ├── papers/          # 论文详情页
+│   │   ├── runs/            # 报告详情页
+│   │   └── settings/        # 设置页
+│   ├── lib/                 # 工具函数、API 客户端
+│   ├── e2e/                 # Playwright E2E 测试
+│   └── package.json
+├── .github/workflows/ci.yml # CI 配置
+├── CLAUDE.md                # Claude Code 指南
+└── README.md
 ```
 
-## Frontend Quick Start
+## 许可证
 
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-前端默认通过 Next.js rewrite 把 `/api/*` 转发到 `http://127.0.0.1:8000`。如需改为直接访问其他后端地址，设置：
-
-```bash
-NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
-```
-
-## Current MVP Status
-
-已完成：
-
-- FastAPI 最小后端
-- SQLite 初始化
-- PDF 上传保存
-- PyMuPDF 解析入口
-- LangGraph workflow 骨架
-- Pydantic schema
-- section title + keyword retrieval 工具
-- OpenAI-compatible 结构化输出入口
-- Markdown 报告生成
-- PDF 报告下载
-- Markdown 报告下载
-- 最近分析列表和 Run 报告详情页
-- Next.js 最小演示闭环
-- 后台分析任务与前端轮询进度
-- 前端模型选择与后端全局默认模型配置
-
-后续重点：
-
-- 提升元信息、方法、实验抽取质量
-- 增加历史论文列表和报告详情页
-- 增加示例论文和测试用例
-
-## Example Report
-
-示例报告见：
-
-```text
-docs/examples/sample_report.md
-```
+MIT

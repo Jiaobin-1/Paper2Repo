@@ -8,6 +8,7 @@ class PaperResponse(BaseModel):
     file_path: str
     file_size: int
     created_at: str
+    arxiv_id: str | None = None
 
 
 class RunResponse(BaseModel):
@@ -21,6 +22,7 @@ class RunResponse(BaseModel):
     started_at: str | None = None
     completed_at: str | None = None
     created_at: str
+    updated_at: str
 
 
 class RunListItemResponse(RunResponse):

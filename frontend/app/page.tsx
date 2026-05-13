@@ -1,26 +1,47 @@
+"use client";
+
+import Link from "next/link";
 import PaperUpload from "./components/upload/PaperUpload";
 import RunHistory from "./components/history/RunHistory";
+import { text } from "../lib/i18n";
+import { useAppLanguage } from "../lib/useAppLanguage";
 
 export default function HomePage() {
+  const language = useAppLanguage();
+
   return (
     <main className="stack">
       <section className="page-heading">
         <div>
           <h1>Paper2Repo</h1>
-          <p className="muted">AI 论文理解与复现规划 Agent。上传 PDF 后，本地完成解析、结构化分析，并生成 Markdown / PDF 复现报告。</p>
+          <p className="muted">{text(language, "appSubtitle")}</p>
+        </div>
+        <div className="action-row">
+          <Link className="button secondary" href="/arxiv">
+            {text(language, "arxivImport")}
+          </Link>
+          <Link className="button secondary" href="/knowledge">
+            {text(language, "knowledgeBase")}
+          </Link>
+          <Link className="button secondary" href="/compare">
+            {text(language, "compare")}
+          </Link>
+          <Link className="button secondary" href="/settings">
+            {text(language, "settings")}
+          </Link>
         </div>
       </section>
 
       <section className="workflow-strip">
-        <span>上传 PDF</span>
-        <span>选择模型</span>
-        <span>后台分析</span>
-        <span>查看报告</span>
-        <span>下载结果</span>
+        <span>{text(language, "uploadPdf")}</span>
+        <span>{text(language, "chooseModel")}</span>
+        <span>{text(language, "backgroundAnalysis")}</span>
+        <span>{text(language, "viewReport")}</span>
+        <span>{text(language, "downloadResults")}</span>
       </section>
 
       <section className="panel stack">
-        <h2>本地分析工作流</h2>
+        <h2>{text(language, "localWorkflow")}</h2>
         <PaperUpload />
       </section>
 
@@ -28,12 +49,12 @@ export default function HomePage() {
 
       <section className="grid">
         <div className="panel">
-          <h3>读懂论文</h3>
-          <p className="muted">结构化输出研究背景、核心问题、贡献、方法和实验。</p>
+          <h3>{text(language, "understandPaper")}</h3>
+          <p className="muted">{text(language, "understandPaperDesc")}</p>
         </div>
         <div className="panel">
-          <h3>规划复现</h3>
-          <p className="muted">生成最小复现目标、模块拆解、目录骨架、风险点和 checklist。</p>
+          <h3>{text(language, "planReproduction")}</h3>
+          <p className="muted">{text(language, "planReproductionDesc")}</p>
         </div>
       </section>
     </main>

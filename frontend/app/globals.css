@@ -76,6 +76,10 @@ main {
   background: #172033;
 }
 
+.button.danger {
+  background: #991b1b;
+}
+
 .button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
@@ -356,6 +360,15 @@ main {
   color: #166534;
 }
 
+.stepper li.failed {
+  color: #991b1b;
+}
+
+.stepper li.failed span {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
 .report-header {
   display: flex;
   justify-content: space-between;
@@ -465,10 +478,336 @@ pre {
   margin: 1.4em 0;
 }
 
+/* Comparison */
+.compare-selector {
+  display: grid;
+  gap: 8px;
+}
+
+.compare-option {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease;
+}
+
+.compare-option:hover {
+  border-color: var(--accent);
+}
+
+.compare-option-selected {
+  border-color: var(--accent);
+  background: #eff6ff;
+}
+
+.compare-option input {
+  margin-top: 3px;
+}
+
+.compare-option div {
+  display: grid;
+  gap: 2px;
+}
+
+.compare-option strong {
+  font-size: 14px;
+}
+
+.compare-option .muted {
+  font-size: 12px;
+}
+
+.compare-table-wrap {
+  overflow-x: auto;
+}
+
+.compare-table {
+  display: grid;
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.compare-table thead,
+.compare-table tbody,
+.compare-table tr {
+  display: contents;
+}
+
+.compare-table th,
+.compare-table td {
+  border: 1px solid var(--border);
+  padding: 10px 12px;
+  text-align: left;
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.compare-table th {
+  background: #f1f5f9;
+  font-weight: 650;
+  position: sticky;
+  top: 0;
+}
+
+.compare-table th a {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.compare-label {
+  font-weight: 600;
+  color: var(--muted);
+  font-size: 13px;
+  background: #f9fbff;
+}
+
+/* Knowledge Base */
+.knowledge-search-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.knowledge-group {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #f9fbff;
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.knowledge-group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.knowledge-link {
+  color: var(--accent);
+  text-decoration: underline;
+  font-size: 13px;
+}
+
+.knowledge-chunk {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  padding: 10px 12px;
+}
+
+.knowledge-chunk-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+.knowledge-section {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.knowledge-score {
+  margin-left: auto;
+  font-weight: 700;
+  color: #166534;
+  background: #dcfce7;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.knowledge-chunk-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+/* Papers With Code */
+.pwc-links {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.pwc-link-item {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #f9fbff;
+}
+
+.pwc-link {
+  color: var(--accent);
+  text-decoration: underline;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+  flex: 1;
+  min-width: 0;
+}
+
+.pwc-type {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: #e9eef6;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* arXiv */
+.arxiv-info {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #f9fbff;
+  padding: 14px;
+  display: grid;
+  gap: 8px;
+}
+
+.arxiv-info h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.arxiv-versions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Q&A Panel */
+.qa-panel h2 {
+  margin: 0 0 8px;
+}
+
+.qa-messages {
+  display: grid;
+  gap: 12px;
+  max-height: 480px;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.qa-message {
+  display: grid;
+  gap: 4px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--background);
+}
+
+.qa-message-user {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  justify-self: end;
+  max-width: 80%;
+}
+
+.qa-message-assistant {
+  background: var(--surface);
+  justify-self: start;
+  max-width: 80%;
+}
+
+.qa-message-role {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.qa-message-content {
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.qa-loading {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.qa-error {
+  color: #dc2626;
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+.qa-input-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.qa-input {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 0.95rem;
+  resize: vertical;
+  min-height: 56px;
+}
+
+.qa-input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.qa-input:disabled {
+  opacity: 0.6;
+}
+
+/* Fullscreen report overlay */
+.report-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: var(--background);
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.report-fullscreen .markdown-body {
+  max-height: none;
+}
+
+.report-fullscreen-toggle {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  justify-content: flex-end;
+  padding-bottom: 8px;
+}
+
 @media (max-width: 720px) {
   main {
-    width: min(100% - 24px, 1040px);
-    padding: 24px 0;
+    width: min(100% - 16px, 1040px);
+    padding: 16px 0;
+  }
+
+  .panel {
+    padding: 16px;
   }
 
   .upload-row {
@@ -485,8 +824,42 @@ pre {
     flex-direction: column;
   }
 
-  .workflow-strip,
+  .workflow-strip {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
   .history-item {
     grid-template-columns: 1fr;
+  }
+
+  .action-row {
+    width: 100%;
+  }
+
+  .action-row .button {
+    flex: 1;
+    min-width: 0;
+    text-align: center;
+  }
+
+  .qa-message-user,
+  .qa-message-assistant {
+    max-width: 95%;
+  }
+
+  .qa-input-row {
+    grid-template-columns: 1fr;
+  }
+
+  .qa-input-row .button {
+    width: 100%;
+  }
+
+  .stepper {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .markdown-body {
+    max-height: 60vh;
   }
 }

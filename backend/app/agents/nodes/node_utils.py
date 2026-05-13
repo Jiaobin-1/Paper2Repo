@@ -81,16 +81,16 @@ def split_sentences(text: str) -> list[str]:
     return [part.strip() for part in re.split(r"(?<=[.!?。！？])\s+", text) if part.strip()]
 
 
-def llm_or_fallback(
+def llm_or_fallback[T: BaseModel](
     *,
     system_prompt: str,
     task_prompt: str,
-    schema_model: type[BaseModel],
-    fallback: BaseModel,
+    schema_model: type[T],
+    fallback: T,
     context: str,
     extra: str = "",
     model_name: str | None = None,
-) -> tuple[BaseModel, bool]:
+) -> tuple[T, bool]:
     client = LLMClient(model_name=model_name)
     if not client.is_configured():
         return fallback, False

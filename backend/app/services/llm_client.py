@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Generator
 from typing import TypeVar
 
 from openai import OpenAI
@@ -58,6 +59,43 @@ class LLMClient:
             raise RuntimeError("LLM returned an empty response with no choices.")
         content = response.choices[0].message.content or "{}"
         return schema_model.model_validate(_load_json_object(content))
+
+    def chat(
+        self,
+        *,
+        system_prompt: str,
+        messages: list[dict[str, str]],
+        temperature: float = 0.3,
+    ) -> str:
+        full_messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
+        full_messages.extend(messages)
+        response = self.client().chat.completions.create(
+            model=self.model_name,
+            temperature=temperature,
+            messages=full_messages,  # type: ignore[arg-type]
+        )
+        if not response.choices:
+            raise RuntimeError("LLM returned an empty response with no choices.")
+        return response.choices[0].message.content or ""
+
+    def chat_stream(
+        self,
+        *,
+        system_prompt: str,
+        messages: list[dict[str, str]],
+        temperature: float = 0.3,
+    ) -> Generator[str, None, None]:
+        full_messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
+        full_messages.extend(messages)
+        stream = self.client().chat.completions.create(
+            model=self.model_name,
+            temperature=temperature,
+            messages=full_messages,  # type: ignore[arg-type]
+            stream=True,
+        )
+        for chunk in stream:
+            if chunk.choices and chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content
 
 
 def _load_json_object(content: str) -> dict:

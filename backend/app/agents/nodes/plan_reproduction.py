@@ -1,6 +1,8 @@
-from app.agents.state import PaperAnalysisState
-from app.agents.prompts import COMMON_SYSTEM_PROMPT, PLAN_REPRODUCTION_PROMPT
+from typing import Literal, cast
+
 from app.agents.nodes.node_utils import context_block, llm_or_fallback
+from app.agents.prompts import PLAN_REPRODUCTION_PROMPT, system_prompt_for_language
+from app.agents.state import PaperAnalysisState
 from app.schemas.reproduction import (
     ChecklistItem,
     CodeStructureItem,
@@ -9,19 +11,13 @@ from app.schemas.reproduction import (
     ReproductionPlan,
     RiskPoint,
 )
-from app.services.retrieval import retrieve_context
+from app.services.paper_analysis import audit_reproduction_gaps, collect_evidence, retrieve_analysis_context
 
 
 def plan_reproduction_node(state: PaperAnalysisState) -> PaperAnalysisState:
     classification = state["classification"]
     chunks = state["chunked_paper"].chunks
-    context = retrieve_context(
-        chunks,
-        query="implementation dataset code reproduce training evaluation",
-        section_hints=["method", "experiment", "implementation", "evaluation"],
-        keywords=["implementation", "dataset", "code", "training", "evaluation", "hyperparameter"],
-        top_k=8,
-    )
+    context = retrieve_analysis_context(chunks, "missing_info", top_k=10)
 
     feasibility_level = "medium"
     if classification.suitability_for_mvp == "good":
@@ -32,6 +28,24 @@ def plan_reproduction_node(state: PaperAnalysisState) -> PaperAnalysisState:
     datasets = [dataset.name for dataset in state["experiment_analysis"].datasets]
     metrics = state["experiment_analysis"].metrics
     method_modules = state["method_analysis"].modules
+    baselines = state["experiment_analysis"].baselines
+    training_details = state["experiment_analysis"].training_details
+    evidence_text = "\n".join(item.content for item in context)
+    blocking_missing_items = audit_reproduction_gaps(
+        datasets=datasets,
+        metrics=metrics,
+        baselines=[] if baselines == ["当前 PDF 片段未明确抽取到 baseline 名称。"] else baselines,
+        training_details=[] if training_details == ["当前 PDF 片段未明确抽取到训练细节。"] else training_details,
+        method_dependencies=state["method_analysis"].implementation_dependencies,
+        method_missing_items=state["method_analysis"].missing_items,
+        experiment_missing_items=state["experiment_analysis"].missing_items,
+        evidence_text=evidence_text,
+    )
+    high_blockers = [item for item in blocking_missing_items if item.severity == "high"]
+    if high_blockers and feasibility_level == "high":
+        feasibility_level = "medium"
+    elif len(high_blockers) >= 2:
+        feasibility_level = "low"
     missing_info = [
         item
         for item in [
@@ -42,6 +56,17 @@ def plan_reproduction_node(state: PaperAnalysisState) -> PaperAnalysisState:
         ]
         if item
     ]
+    missing_info.extend([item.item for item in blocking_missing_items if item.item not in missing_info])
+
+    first_experiment = (
+        state["experiment_analysis"].reproduction_matrix[0].target
+        if state["experiment_analysis"].reproduction_matrix
+        else "围绕一个可获得数据集跑通最小主实验"
+    )
+    recommended_first_experiment = (
+        f"{first_experiment}：使用 {', '.join(datasets[:2]) if datasets else 'toy subset/可获得替代数据'}，"
+        f"实现核心方法并报告 {', '.join(metrics[:3]) if metrics else '主指标'}。"
+    )
 
     required_modules = [
         ReproductionModule(
@@ -73,11 +98,17 @@ def plan_reproduction_node(state: PaperAnalysisState) -> PaperAnalysisState:
     )
 
     fallback = ReproductionPlan(
+        audit_summary=(
+            f"当前复现审计结论为 {feasibility_level}。"
+            f"{'存在高优先级阻塞：' + '；'.join(item.item for item in high_blockers[:3]) if high_blockers else '未发现不可绕过的高优先级阻塞，但仍需补齐缺失实现细节。'}"
+        ),
+        confidence="low" if high_blockers else "medium",
+        recommended_first_experiment=recommended_first_experiment,
         feasibility_summary=(
             f"该论文被归类为 {classification.domain}/{classification.paper_type}，建议复现方式为 "
-            f"{classification.reproduction_mode}。第一版应优先复现一个小规模主实验闭环，而不是完整重跑全部实验。"
+            f"{classification.reproduction_mode}。第一版应优先复现可验收的最小主实验闭环，而不是完整重跑全部实验。"
         ),
-        feasibility_level=feasibility_level,
+        feasibility_level=cast(Literal["high", "medium", "low"], feasibility_level),
         minimum_reproduction_goal=(
             f"围绕 {', '.join(datasets[:3]) if datasets else '论文中的一个可获得数据集或 toy subset'}，"
             f"实现数据加载、核心方法、{', '.join(metrics[:3]) if metrics else '主要评价指标'} 计算和一份结果报告。"
@@ -126,10 +157,23 @@ def plan_reproduction_node(state: PaperAnalysisState) -> PaperAnalysisState:
             RiskPoint(risk="完整实验可能依赖较高算力。", impact="medium", mitigation="优先 inference/small subset，再扩展训练规模。"),
         ],
         missing_information=missing_info,
+        blocking_missing_items=blocking_missing_items,
+        acceptance_criteria=[
+            "能用一条命令完成数据准备、核心方法运行和评价输出。",
+            f"输出至少包含 {', '.join(metrics[:3]) if metrics else '论文主指标'}，并记录与论文报告值的差距。",
+            "所有未知超参数、数据处理假设和替代实现都写入复现日志。",
+            "报告能明确说明当前结果是 faithful reproduction、partial reproduction 还是 sanity check。",
+        ],
+        evidence_refs=collect_evidence(
+            context,
+            "复现审计和缺失信息",
+            keywords=["implementation", "dataset", "code", "training", "evaluation", "hyperparameter"],
+            limit=4,
+        ),
         suggested_simplifications=["使用小数据子集", "优先跑 inference-only 或单 epoch", "先跳过昂贵消融实验", "用配置文件固定所有假设"],
     )
     plan, _used_llm = llm_or_fallback(
-        system_prompt=COMMON_SYSTEM_PROMPT,
+        system_prompt=system_prompt_for_language(state.get("report_language")),
         task_prompt=PLAN_REPRODUCTION_PROMPT,
         schema_model=ReproductionPlan,
         fallback=fallback,

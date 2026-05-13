@@ -1,44 +1,36 @@
 "use client";
 
-import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import {
-  getLlmConfig,
+  getAppSettings,
   getReport,
   getReportMarkdownUrl,
   getReportPdfUrl,
-  getRun,
   startAnalysis,
-  updateLlmConfig,
   uploadPaper,
 } from "../../../lib/api";
-import type { LlmConfig, Paper, Report, Run } from "../../../lib/types";
+import { formatProgressMessage, formatRunStatusWithProgress } from "../../../lib/runPresentation";
+import { pollRunUntilTerminal } from "../../../lib/runPolling";
+import { text } from "../../../lib/i18n";
+import { SETTINGS_UPDATED_EVENT, useAppLanguage } from "../../../lib/useAppLanguage";
+import type { AppSettings, Paper, Report, Run } from "../../../lib/types";
+import { WorkflowProgress } from "../report/RunProgress";
+import InfoBlock from "../shared/InfoBlock";
 
-const WORKFLOW_STEPS = [
-  { key: "parse_pdf_node", label: "解析 PDF" },
-  { key: "chunk_paper_node", label: "切分论文" },
-  { key: "extract_metadata_node", label: "提取元信息" },
-  { key: "classify_paper_type_node", label: "判断论文类型" },
-  { key: "understand_paper_node", label: "理解论文" },
-  { key: "analyze_method_node", label: "拆解方法" },
-  { key: "analyze_experiments_node", label: "分析实验" },
-  { key: "plan_reproduction_node", label: "规划复现" },
-  { key: "generate_report_node", label: "生成报告" },
-  { key: "persist_result_node", label: "保存结果" },
-];
+const MAX_PDF_SIZE_BYTES = 50 * 1024 * 1024;
 
 export default function PaperUpload() {
+  const language = useAppLanguage();
   const [file, setFile] = useState<File | null>(null);
   const [paper, setPaper] = useState<Paper | null>(null);
   const [run, setRun] = useState<Run | null>(null);
   const [report, setReport] = useState<Report | null>(null);
-  const [llmConfig, setLlmConfig] = useState<LlmConfig | null>(null);
-  const [selectedModel, setSelectedModel] = useState("");
-  const [message, setMessage] = useState("选择一篇 PDF 后开始本地分析。");
+  const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [message, setMessage] = useState(text(language, "selectPdfStart"));
   const [isUploading, setIsUploading] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [isSavingModel, setIsSavingModel] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const pollingAbortRef = useRef<AbortController | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -53,37 +45,52 @@ export default function PaperUpload() {
   useEffect(() => {
     let isMounted = true;
 
-    getLlmConfig()
-      .then((config) => {
-        if (!isMounted) {
-          return;
-        }
-        setLlmConfig(config);
-        setSelectedModel(config.default_model);
-        if (!config.configured) {
-          setMessage("LLM 未配置，将使用本地 fallback。");
-        }
-      })
-      .catch((error) => {
-        if (!isMounted) {
-          return;
-        }
-        setMessage(error instanceof Error ? error.message : "模型配置加载失败。");
-      });
+    function loadSettings() {
+      getAppSettings()
+        .then((config) => {
+          if (!isMounted) {
+            return;
+          }
+          setSettings(config);
+          if (!config.configured) {
+            setMessage(text(config.ui_language, "modelNotConfigured"));
+          }
+        })
+        .catch((error) => {
+          if (!isMounted) {
+            return;
+          }
+          setMessage(error instanceof Error ? error.message : text(language, "modelLoadFailed"));
+        });
+    }
 
+    loadSettings();
+    window.addEventListener(SETTINGS_UPDATED_EVENT, loadSettings);
     return () => {
       isMounted = false;
+      window.removeEventListener(SETTINGS_UPDATED_EVENT, loadSettings);
     };
-  }, []);
+  }, [language]);
+
+  useEffect(() => {
+    setMessage((currentMessage) => {
+      if (
+        currentMessage === text(language === "zh" ? "en" : "zh", "selectPdfStart") ||
+        currentMessage === text(language === "zh" ? "en" : "zh", "modelNotConfigured")
+      ) {
+        return settings?.configured ? text(language, "selectPdfStart") : text(language, "modelNotConfigured");
+      }
+      return currentMessage;
+    });
+  }, [language, settings?.configured]);
 
   function validateAndSetFile(f: File): boolean {
-    if (f.type !== "application/pdf") {
-      setMessage("仅支持 PDF 文件。");
+    if (!isPdfFile(f)) {
+      setMessage(text(language, "pdfOnly"));
       return false;
     }
-    const MAX_SIZE = 50 * 1024 * 1024; // 50 MB
-    if (f.size > MAX_SIZE) {
-      setMessage(`文件过大（${formatFileSize(f.size)}），上限 50 MB。`);
+    if (f.size > MAX_PDF_SIZE_BYTES) {
+      setMessage(`${text(language, "pdfTooLarge")}（${formatFileSize(f.size)}），${text(language, "maxSize")}`);
       return false;
     }
     setFile(f);
@@ -121,21 +128,21 @@ export default function PaperUpload() {
 
   async function handleUpload() {
     if (!file) {
-      setMessage("请先选择 PDF 文件。");
+      setMessage(text(language, "choosePdfFirst"));
       return;
     }
     setIsUploading(true);
     setPaper(null);
     setRun(null);
     setReport(null);
-    setMessage("正在上传 PDF...");
+    setMessage(text(language, "uploadingPdf"));
     try {
       const uploadedPaper = await uploadPaper(file);
       setPaper(uploadedPaper);
-      setMessage("上传成功，可以启动分析。");
+      setMessage(text(language, "uploadSuccess"));
       window.dispatchEvent(new Event("paper2repo:runs-updated"));
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "上传失败。");
+      setMessage(error instanceof Error ? error.message : text(language, "uploadFailed"));
     } finally {
       setIsUploading(false);
     }
@@ -143,7 +150,7 @@ export default function PaperUpload() {
 
   async function handleAnalyze() {
     if (!paper) {
-      setMessage("请先上传 PDF。");
+      setMessage(text(language, "uploadPaperFirst"));
       return;
     }
 
@@ -154,53 +161,45 @@ export default function PaperUpload() {
     setIsAnalyzing(true);
     setRun(null);
     setReport(null);
-    setMessage("正在运行论文理解与复现规划流程...");
+    setMessage(text(language, "analysisStarting"));
     try {
       const startedRun = await startAnalysis(paper.id);
       setRun(startedRun);
-      let latestRun = startedRun;
-      setMessage("任务已提交，正在分析...");
+      setMessage(text(language, "analysisQueued"));
 
-      let consecutiveErrors = 0;
-      for (let attempt = 0; attempt < 600; attempt += 1) {
-        await sleep(1000, abortController.signal);
-        try {
-          latestRun = await getRun(startedRun.id);
-          consecutiveErrors = 0;
-        } catch {
-          consecutiveErrors += 1;
-          if (consecutiveErrors >= 5) {
-            setMessage("网络连接中断，分析监控已停止。");
-            return;
-          }
-          setMessage(`网络请求失败，正在重试 (${consecutiveErrors}/5)...`);
-          continue;
-        }
-        if (abortController.signal.aborted) return;
-        setRun(latestRun);
+      const terminalRun = await pollRunUntilTerminal(
+        startedRun.id,
+        {
+          onRun: (latestRun) => {
+            if (abortController.signal.aborted) return;
+            setRun(latestRun);
+            if (latestRun.status !== "completed" && latestRun.status !== "failed") {
+              setMessage(formatProgressMessage(latestRun, language));
+            }
+          },
+          onRetry: (consecutiveErrors) => {
+            setMessage(`${text(language, "retrying")} (${consecutiveErrors}/5)...`);
+          },
+        },
+        { signal: abortController.signal, delayFirstPoll: true, language },
+      );
 
-        if (latestRun.status === "completed") {
-          const generatedReport = await getReport(latestRun.id);
-          setReport(generatedReport);
-          setMessage("分析完成，报告已生成。");
-          window.dispatchEvent(new Event("paper2repo:runs-updated"));
-          return;
-        }
-
-        if (latestRun.status === "failed") {
-          setMessage(latestRun.error_message ?? "分析失败。");
-          window.dispatchEvent(new Event("paper2repo:runs-updated"));
-          return;
-        }
-
-        setMessage(`正在执行：${stepLabel(latestRun.current_step)} (${latestRun.progress_percent}%)`);
+      setRun(terminalRun);
+      if (terminalRun.status === "completed") {
+        const generatedReport = await getReport(terminalRun.id);
+        setReport(generatedReport);
+        setMessage(text(language, "analysisDone"));
+        window.dispatchEvent(new Event("paper2repo:runs-updated"));
+        return;
       }
-      setMessage("分析仍在运行，请稍后刷新任务状态。");
+
+      setMessage(terminalRun.error_message ?? text(language, "analysisFailed"));
+      window.dispatchEvent(new Event("paper2repo:runs-updated"));
     } catch (error) {
       if (abortController.signal.aborted) {
         return;
       }
-      setMessage(error instanceof Error ? error.message : "分析失败。请确认后端服务正在运行。");
+      setMessage(error instanceof Error ? error.message : text(language, "backendOffline"));
     } finally {
       if (pollingAbortRef.current === abortController) {
         pollingAbortRef.current = null;
@@ -209,57 +208,8 @@ export default function PaperUpload() {
     }
   }
 
-  async function handleModelChange(event: ChangeEvent<HTMLSelectElement>) {
-    const nextModel = event.target.value;
-    setSelectedModel(nextModel);
-    setIsSavingModel(true);
-    try {
-      const updatedConfig = await updateLlmConfig(nextModel);
-      setLlmConfig(updatedConfig);
-      setSelectedModel(updatedConfig.default_model);
-      setMessage(
-        updatedConfig.configured
-          ? `已切换默认模型：${updatedConfig.default_model}`
-          : `已切换默认模型：${updatedConfig.default_model}。LLM 未配置，将使用本地 fallback。`,
-      );
-    } catch (error) {
-      setSelectedModel(llmConfig?.default_model ?? "");
-      setMessage(error instanceof Error ? error.message : "模型切换失败。");
-    } finally {
-      setIsSavingModel(false);
-    }
-  }
-
   return (
     <div className="stack">
-      <section className="model-panel">
-        <label className="field-label" htmlFor="model-select">
-          分析模型
-        </label>
-        <select
-          id="model-select"
-          className="select"
-          value={selectedModel}
-          disabled={!llmConfig || isSavingModel || isUploading || isAnalyzing}
-          onChange={handleModelChange}
-        >
-          {llmConfig ? (
-            llmConfig.available_models.map((model) => (
-              <option key={model} value={model}>
-                {model}
-              </option>
-            ))
-          ) : (
-            <option value="">加载模型配置...</option>
-          )}
-        </select>
-        <p className="muted">
-          {llmConfig
-            ? `${llmConfig.configured ? "LLM 已配置" : "LLM 未配置，本地 fallback"} · ${llmConfig.base_url}`
-            : "正在读取后端模型配置..."}
-        </p>
-      </section>
-
       <div
         className={`drop-zone${isDragging ? " drop-zone-active" : ""}`}
         onDragEnter={handleDragEnter}
@@ -283,41 +233,41 @@ export default function PaperUpload() {
             if (selected) validateAndSetFile(selected);
           }}
         />
-        <p className="muted">{file ? file.name : "拖拽 PDF 到此处，或点击选择文件"}</p>
+        <p className="muted">{file ? file.name : language === "en" ? "Drop a PDF here, or click to choose a file" : "拖拽 PDF 到此处，或点击选择文件"}</p>
       </div>
       <div className="upload-row">
         <button className="button" type="button" disabled={!file || isUploading || isAnalyzing} onClick={handleUpload}>
-          {isUploading ? "上传中..." : "上传 PDF"}
+          {isUploading ? text(language, "uploadButtonBusy") : text(language, "uploadPdf")}
         </button>
-        <button className="button secondary" type="button" disabled={!paper || isUploading || isAnalyzing || isSavingModel} onClick={handleAnalyze}>
-          {isAnalyzing ? "分析中..." : "启动分析"}
+        <button className="button secondary" type="button" disabled={!paper || isUploading || isAnalyzing} onClick={handleAnalyze}>
+          {isAnalyzing ? text(language, "analyzing") : text(language, "startAnalysis")}
         </button>
       </div>
 
       <p className="muted">{message}</p>
 
       <div className="grid">
-        <InfoBlock title="Paper ID" value={paper?.id ?? "上传后显示"} />
-        <InfoBlock title="Run ID" value={run?.id ?? "启动分析后显示"} />
-        <InfoBlock title="Run 状态" value={run ? `${run.status} · ${run.progress_percent}%` : "pending"} />
-        <InfoBlock title="模型" value={run?.model_name ?? selectedModel ?? "模型配置加载中"} />
+        <InfoBlock title={text(language, "taskStatus")} value={formatRunStatusWithProgress(run, language)} />
+        <InfoBlock title={text(language, "analysisModel")} value={run?.model_name || settings?.default_model || text(language, "loadingModelConfig")} />
       </div>
 
       {run ? <WorkflowProgress run={run} /> : null}
 
       {paper ? (
         <section className="sub-panel">
-          <h3>已上传论文</h3>
+          <h3>{text(language, "uploadedPaper")}</h3>
           <p>
             <strong>{paper.filename}</strong>
           </p>
-          <p className="muted">文件大小：{formatFileSize(paper.file_size)}</p>
+          <p className="muted">
+            {text(language, "fileSize")}：{formatFileSize(paper.file_size)}
+          </p>
         </section>
       ) : null}
 
       {run?.error_message ? (
         <section className="error-box">
-          <h3>任务错误</h3>
+          <h3>{text(language, "taskError")}</h3>
           <p>{run.error_message}</p>
         </section>
       ) : null}
@@ -327,17 +277,17 @@ export default function PaperUpload() {
           <div className="report-header">
             <div>
               <h3>{report.title}</h3>
-              <p className="muted">报告已生成，可打开详情页或下载文件。</p>
+              <p className="muted">{text(language, "reportGeneratedHint")}</p>
             </div>
             <div className="action-row">
               <Link className="button" href={`/runs/${report.run_id}`}>
-                查看 Markdown
+                {text(language, "viewMarkdown")}
               </Link>
               <a className="button secondary" href={getReportMarkdownUrl(report.run_id)} download>
-                下载 Markdown
+                {text(language, "downloadMarkdown")}
               </a>
               <a className="button secondary" href={getReportPdfUrl(report.run_id)} download>
-                下载 PDF
+                {text(language, "downloadPdf")}
               </a>
             </div>
           </div>
@@ -350,63 +300,6 @@ export default function PaperUpload() {
   );
 }
 
-function InfoBlock({ title, value }: { title: string; value: string }) {
-  return (
-    <div className="status-card">
-      <span>{title}</span>
-      <strong>{value}</strong>
-    </div>
-  );
-}
-
-function WorkflowProgress({ run }: { run: Run }) {
-  const progress = Math.max(0, Math.min(100, run.progress_percent ?? 0));
-  const currentStepIndex = WORKFLOW_STEPS.findIndex((s) => s.key === run.current_step);
-
-  return (
-    <section className="progress-panel">
-      <div className="progress-header">
-        <div>
-          <h3>分析进度</h3>
-          <p className="muted">当前步骤：{stepLabel(run.current_step)}</p>
-        </div>
-        <strong>{progress}%</strong>
-      </div>
-      <div className="progress-track" aria-label="analysis progress">
-        <div className="progress-fill" style={{ width: `${progress}%` }} />
-      </div>
-      <ol className="stepper">
-        {WORKFLOW_STEPS.map((step, index) => {
-          const isComplete = run.status === "completed" || (currentStepIndex >= 0 && index < currentStepIndex);
-          const isActive = run.status !== "completed" && index === currentStepIndex;
-          return (
-            <li key={step.key} className={isComplete ? "done" : isActive ? "active" : ""}>
-              <span>{isComplete ? "✓" : index + 1}</span>
-              <strong>{step.label}</strong>
-            </li>
-          );
-        })}
-      </ol>
-    </section>
-  );
-}
-
-function stepLabel(step: string | null): string {
-  if (!step) {
-    return "等待开始";
-  }
-  if (step === "queued") {
-    return "排队中";
-  }
-  if (step === "completed") {
-    return "已完成";
-  }
-  if (step === "failed") {
-    return "失败";
-  }
-  return WORKFLOW_STEPS.find((item) => item.key === step)?.label ?? step;
-}
-
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   const kb = bytes / 1024;
@@ -414,20 +307,6 @@ function formatFileSize(bytes: number): string {
   return `${(kb / 1024).toFixed(1)} MB`;
 }
 
-function sleep(ms: number, signal?: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(new DOMException("Aborted", "AbortError"));
-      return;
-    }
-    const timer = setTimeout(resolve, ms);
-    signal?.addEventListener(
-      "abort",
-      () => {
-        clearTimeout(timer);
-        reject(new DOMException("Aborted", "AbortError"));
-      },
-      { once: true },
-    );
-  });
+function isPdfFile(file: File): boolean {
+  return file.type === "application/pdf" || (!file.type && file.name.toLowerCase().endsWith(".pdf"));
 }

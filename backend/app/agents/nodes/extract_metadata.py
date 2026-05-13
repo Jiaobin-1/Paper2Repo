@@ -5,7 +5,6 @@ import re
 from app.agents.state import PaperAnalysisState
 from app.schemas.metadata import PaperMetadata, SectionInfo
 
-
 TITLE_STOP_PATTERN = re.compile(r"^(abstract|keywords?|index terms|introduction)\b", flags=re.IGNORECASE)
 BOILERPLATE_PATTERNS = [
     r"published as a conference paper",
@@ -19,6 +18,18 @@ BOILERPLATE_PATTERNS = [
     r"anonymous",
     r"submission",
 ]
+
+# Patterns that indicate the title has bled into the author line.
+# "Word, Word" (comma-separated capitalized names) or "and Word" (last author).
+_AUTHOR_BOUNDARY = re.compile(
+    r",\s+[A-Z][a-z]+(?:\s+[A-Z]\.?)?\s+(?:[A-Z][a-z]+|and\b)|"  # "Vaswani, Noam S."
+    r"\s+and\s+[A-Z][a-z]+\s+[A-Z][a-z]+"                         # "and Aidan Gomez"
+)
+
+_INSTITUTION_KEYWORDS = re.compile(
+    r"\b(universit|institute|department|school|lab[s]?|research|college|center|centre|corp|inc|ltd|gmbh)\b",
+    flags=re.IGNORECASE,
+)
 
 
 def _front_matter_lines(text: str, limit: int = 30) -> list[str]:
@@ -76,6 +87,14 @@ def _title_score(line: str, index: int) -> int:
     return score
 
 
+def _trim_title(title: str) -> str:
+    """Trim author-name suffixes that the line-combining heuristic may have captured."""
+    match = _AUTHOR_BOUNDARY.search(title)
+    if match:
+        title = title[: match.start()].strip(" -")
+    return title
+
+
 def _extract_title_and_index(lines: list[str]) -> tuple[str, int]:
     candidates: list[tuple[int, str, int]] = []
     searchable = [line for line in lines if not TITLE_STOP_PATTERN.match(line)]
@@ -90,8 +109,26 @@ def _extract_title_and_index(lines: list[str]) -> tuple[str, int]:
         return ("Untitled Paper", 0)
 
     candidates.sort(key=lambda item: (-item[0], item[2]))
-    title = candidates[0][1].strip(" -")
+    title = _trim_title(candidates[0][1].strip(" -"))
     return (title, candidates[0][2])
+
+
+def _looks_like_names(line: str) -> bool:
+    """Heuristic: does this line look like a list of author names?"""
+    # Names typically have commas separating multiple people, or "and" before the last.
+    # Reject if it has institution keywords.
+    if _INSTITUTION_KEYWORDS.search(line):
+        return False
+    # Names: "Alice Bob, Charlie D. Eve, and Frank Green"
+    parts = [p.strip() for p in re.split(r",|\band\b", line) if p.strip()]
+    if len(parts) < 1:
+        return False
+    name_like = 0
+    for part in parts[:10]:
+        words = part.split()
+        if 1 <= len(words) <= 4 and all(w[0].isupper() for w in words if len(w) > 1):
+            name_like += 1
+    return name_like >= max(1, len(parts) * 0.6)
 
 
 def _extract_authors(lines: list[str], title_index: int) -> list[str]:
@@ -101,12 +138,15 @@ def _extract_authors(lines: list[str], title_index: int) -> list[str]:
             break
         if _is_boilerplate(line):
             continue
-        if re.search(r"\b(university|institute|department|school|lab|labs)\b", line, flags=re.IGNORECASE):
+        if _INSTITUTION_KEYWORDS.search(line):
             continue
         if "@" in line or line.lower().startswith(("http", "www.")):
             continue
         if len(line) > 160:
             continue
+        # If we already have some authors and this line doesn't look like names, stop.
+        if authors and not _looks_like_names(line):
+            break
         authors.append(line)
     return authors[:10]
 
