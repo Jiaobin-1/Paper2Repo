@@ -1,17 +1,24 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from app.schemas.common import EvidenceRef, MissingItem
 
 
 class MethodModule(BaseModel):
-    name: str
+    module_name: str
+    paper_section: str
     responsibility: str
-    inputs: list[str] = Field(default_factory=list)
-    outputs: list[str] = Field(default_factory=list)
+    known_inputs: list[str] = Field(default_factory=list)
+    inferred_inputs: list[str] = Field(default_factory=list)
+    missing_inputs: list[str] = Field(default_factory=list)
+    known_outputs: list[str] = Field(default_factory=list)
+    inferred_outputs: list[str] = Field(default_factory=list)
+    missing_outputs: list[str] = Field(default_factory=list)
+    key_parameters: list[str] = Field(default_factory=list)
     implementation_notes: list[str] = Field(default_factory=list)
-    implementation_priority: str = "must"
-    interface_contract: str = ""
-    evidence: list[EvidenceRef] = Field(default_factory=list)
+    evidence_quote: str = ""
+    confidence: Literal["low", "medium", "high"] = "medium"
 
 
 class AlgorithmStep(BaseModel):

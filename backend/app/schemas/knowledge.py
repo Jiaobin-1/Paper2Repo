@@ -6,6 +6,7 @@ from pydantic import BaseModel
 class KnowledgeSearchResult(BaseModel):
     paper_id: str
     paper_title: str | None = None
+    chunk_index: int
     chunk_content: str
     section_title: str | None = None
     page_start: int

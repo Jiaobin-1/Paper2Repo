@@ -6,6 +6,8 @@ import ReactMarkdown from "react-markdown";
 import {
   getAppSettings,
   getReport,
+  getReportHtmlUrl,
+  getReportLatexUrl,
   getReportMarkdownUrl,
   getReportPdfUrl,
   startAnalysis,
@@ -288,6 +290,12 @@ export default function PaperUpload() {
               </a>
               <a className="button secondary" href={getReportPdfUrl(report.run_id)} download>
                 {text(language, "downloadPdf")}
+              </a>
+              <a className="button secondary" href={getReportHtmlUrl(report.run_id)} download>
+                {text(language, "downloadHtml")}
+              </a>
+              <a className="button secondary" href={getReportLatexUrl(report.run_id)} download>
+                {text(language, "downloadLatex")}
               </a>
             </div>
           </div>

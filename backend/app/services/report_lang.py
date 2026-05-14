@@ -101,6 +101,11 @@ class Lang:
     h_feasibility: str = ""
     h_feasibility_level: str = ""
     h_feasibility_summary: str = ""
+    h_difficulty_breakdown: str = ""
+    h_dependency_difficulty: str = ""
+    h_data_difficulty: str = ""
+    h_compute_difficulty: str = ""
+    h_implementation_difficulty: str = ""
     h_min_goal: str = ""
     h_first_exp: str = ""
     h_scope: str = ""
@@ -151,7 +156,7 @@ ZH = Lang(
     no_value="未在当前 PDF 片段中明确提取到。",
     ev_claim="结论", ev_location="位置", ev_section="章节", ev_quote="摘录",
     ev_no_claim="未标注", ev_no_location="未知页码", ev_no_section="未知章节", ev_no_quote="未截取到原文",
-    ev_empty_row="| 未找到明确证据 | - | - | - |\n",
+    ev_empty_row="| 未找到明确证据 | - | - | - | - |\n",
     ms_category="类别", ms_severity="严重度", ms_gap="缺口", ms_action="建议动作",
     ms_empty_row=["暂未识别", "-", "当前片段未识别到明确阻塞缺口", "复现前仍需人工快速核查"],
     mx_target="目标", mx_dataset="数据集", mx_baseline="基线方法", mx_metric="指标",
@@ -185,7 +190,10 @@ ZH = Lang(
     h_eval_protocol="### 评价协议", h_main_results="### 主要结果", h_ablation="### 消融实验",
     h_experiment_gaps="### 实验阶段缺失项",
     h_plan="## 5. 复现规划", h_feasibility="### 复现可行性", h_feasibility_level="等级",
-    h_feasibility_summary="说明", h_min_goal="### 最小复现目标", h_first_exp="### 推荐第一项实验",
+    h_feasibility_summary="说明", h_difficulty_breakdown="### 复现难度拆解",
+    h_dependency_difficulty="依赖可得性", h_data_difficulty="数据可得性",
+    h_compute_difficulty="算力成本", h_implementation_difficulty="实现复杂度",
+    h_min_goal="### 最小复现目标", h_first_exp="### 推荐第一项实验",
     h_scope="### 复现范围", h_req_modules="### 必要模块", h_dataset_plan="### 数据计划",
     h_eval_plan="### 评价计划", h_code_skeleton="### 建议代码目录骨架", h_impl_steps="### 实现步骤",
     h_acceptance="### 验收标准", h_risks="### 风险点", h_missing_info="### 缺失信息",
@@ -212,7 +220,7 @@ EN = Lang(
     no_value="Not clearly extracted from the current PDF context.",
     ev_claim="Claim", ev_location="Location", ev_section="Section", ev_quote="Quote",
     ev_no_claim="Not labeled", ev_no_location="Unknown page", ev_no_section="Unknown section", ev_no_quote="No quote extracted",
-    ev_empty_row="| No clear evidence found | - | - | - |\n",
+    ev_empty_row="| No clear evidence found | - | - | - | - |\n",
     ms_category="Category", ms_severity="Severity", ms_gap="Gap", ms_action="Suggested action",
     ms_empty_row=["Not identified", "-", "No explicit blocking gap was identified in the current context", "Still perform a quick manual check before reproduction"],
     mx_target="Target", mx_dataset="Dataset", mx_baseline="Baseline", mx_metric="Metric",
@@ -246,7 +254,10 @@ EN = Lang(
     h_eval_protocol="### Evaluation Protocol", h_main_results="### Main Results", h_ablation="### Ablation Studies",
     h_experiment_gaps="### Experiment Gaps",
     h_plan="## 5. Reproduction Plan", h_feasibility="### Feasibility", h_feasibility_level="Level",
-    h_feasibility_summary="Summary", h_min_goal="### Minimum Reproduction Goal", h_first_exp="### Recommended First Experiment",
+    h_feasibility_summary="Summary", h_difficulty_breakdown="### Difficulty Breakdown",
+    h_dependency_difficulty="Dependency Availability", h_data_difficulty="Data Availability",
+    h_compute_difficulty="Compute Cost", h_implementation_difficulty="Implementation Complexity",
+    h_min_goal="### Minimum Reproduction Goal", h_first_exp="### Recommended First Experiment",
     h_scope="### Scope", h_req_modules="### Required Modules", h_dataset_plan="### Dataset Plan",
     h_eval_plan="### Evaluation Plan", h_code_skeleton="### Suggested Code Skeleton", h_impl_steps="### Implementation Steps",
     h_acceptance="### Acceptance Criteria", h_risks="### Risks", h_missing_info="### Missing Information",

@@ -8,12 +8,14 @@ from app.core.config import get_settings
 from app.core.database import (
     get_default_model,
     get_report_language,
+    get_theme,
     get_ui_language,
     set_default_model,
     set_report_language,
+    set_theme,
     set_ui_language,
 )
-from app.schemas.settings import AppSettingsResponse, AppSettingsUpdateRequest, LanguageCode
+from app.schemas.settings import AppSettingsResponse, AppSettingsUpdateRequest, LanguageCode, ThemeMode
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -42,6 +44,8 @@ def update_app_settings(payload: AppSettingsUpdateRequest) -> AppSettingsRespons
             set_ui_language(payload.ui_language)
         if payload.report_language is not None:
             set_report_language(payload.report_language)
+        if payload.theme is not None:
+            set_theme(payload.theme)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _settings_response()
@@ -56,4 +60,5 @@ def _settings_response() -> AppSettingsResponse:
         available_models=settings.available_openai_models,
         ui_language=cast(LanguageCode, get_ui_language()),
         report_language=cast(LanguageCode, get_report_language()),
+        theme=cast(ThemeMode, get_theme()),
     )

@@ -35,15 +35,19 @@ export type LlmConfig = {
 
 export type LanguageCode = "zh" | "en";
 
+export type ThemeMode = "light" | "dark" | "system";
+
 export type AppSettings = LlmConfig & {
   ui_language: LanguageCode;
   report_language: LanguageCode;
+  theme: ThemeMode;
 };
 
 export type AppSettingsUpdate = {
   default_model?: string;
   ui_language?: LanguageCode;
   report_language?: LanguageCode;
+  theme?: ThemeMode;
 };
 
 export type Report = {
@@ -125,6 +129,7 @@ export type PwcLink = {
 export type KnowledgeSearchResult = {
   paper_id: string;
   paper_title: string | null;
+  chunk_index: number;
   chunk_content: string;
   section_title: string | null;
   page_start: number;
@@ -148,4 +153,37 @@ export type ArxivInfo = {
   arxiv_id: string;
   title: string;
   versions: ArxivVersion[];
+};
+
+export type CitationInfo = {
+  citation_index: number;
+  authors: string;
+  title: string;
+  venue: string;
+  year: string;
+  doi: string;
+  raw_text: string;
+};
+
+export type CitationEdge = {
+  source_paper_id: string;
+  target_paper_id: string;
+  source_title: string;
+  target_title: string;
+  cited_title: string;
+  similarity: number;
+};
+
+export type BatchUploadResponse = {
+  papers: Paper[];
+};
+
+export type BatchStartResponse = {
+  batch_id: string;
+  runs: Run[];
+};
+
+export type BatchStatusResponse = {
+  batch_id: string;
+  runs: RunListItem[];
 };

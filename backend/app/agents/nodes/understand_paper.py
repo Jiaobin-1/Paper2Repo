@@ -2,13 +2,13 @@ from app.agents.nodes.node_utils import context_block, evidence_sentence, extrac
 from app.agents.prompts import UNDERSTAND_PAPER_PROMPT, system_prompt_for_language
 from app.agents.state import PaperAnalysisState
 from app.schemas.common import MissingItem
-from app.schemas.understanding import PaperUnderstanding, ReadingTask
+from app.schemas.understanding import LimitationItem, PaperUnderstanding, ReadingTask
 from app.services.paper_analysis import collect_evidence, retrieve_analysis_context
 
 
 def understand_paper_node(state: PaperAnalysisState) -> PaperAnalysisState:
     chunks = state["chunked_paper"].chunks
-    context = retrieve_analysis_context(chunks, "understanding", top_k=10)
+    context = retrieve_analysis_context(chunks, "understanding", top_k=10, embedding_cache=state.get("retrieval_cache"))
     metadata = state["metadata"]
 
     contribution_sentences = extract_sentences(
@@ -43,6 +43,22 @@ def understand_paper_node(state: PaperAnalysisState) -> PaperAnalysisState:
                 suggested_action="核查 Discussion、Limitations、Appendix 或实验分析中的负结果。",
             )
         )
+    limitations = [
+        LimitationItem(
+            limitation_type="inferred_limitations",
+            description=sentence,
+            evidence_quote=sentence,
+            confidence="medium",
+        )
+        for sentence in limitation_sentences
+    ] or [
+        LimitationItem(
+            limitation_type="reproduction_risks",
+            description="当前 PDF 片段未明确说明局限性；复现时需重点核查数据、算力和实现细节。",
+            confidence="low",
+        )
+    ]
+    classification = state["classification"]
     fallback = PaperUnderstanding(
         background=metadata.abstract
         or evidence_sentence(context, ["background", "recent", "existing", "challenge"], "当前 PDF 片段未明确提取到研究背景。"),
@@ -64,12 +80,8 @@ def understand_paper_node(state: PaperAnalysisState) -> PaperAnalysisState:
             ["conclusion", "result", "outperform", "effective", "achieve"],
             "当前 PDF 片段未明确提取到论文结论。",
         ),
-        limitations=limitation_sentences or ["当前 PDF 片段未明确说明局限性；复现时需重点核查数据、算力和实现细节。"],
-        applicable_scenarios=[
-            item
-            for item in [state["classification"].domain, *metadata.keywords[:4]]
-            if item and item != "other"
-        ],
+        limitations=limitations,
+        applicable_scenarios=[item for item in [*classification.paper_types, *metadata.keywords[:4]] if item and item != "other"],
         key_assumptions=[
             "论文核心问题是否能从摘要/引言中被清楚定位。",
             "主要贡献是否有方法或实验章节证据支撑。",

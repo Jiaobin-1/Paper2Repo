@@ -27,7 +27,7 @@ export default function QaPanel({ runId }: { runId: string }) {
       })
       .catch(() => {
         if (isMounted) {
-          setError(text(language, "qaLoadHistoryError"));
+      setError(text(language, "qaLoadHistoryError"));
           setHistoryLoaded(true);
         }
       });
@@ -47,6 +47,9 @@ export default function QaPanel({ runId }: { runId: string }) {
     setInput("");
     setLoading(true);
     setError(null);
+    abortRef.current?.abort();
+    const abortController = new AbortController();
+    abortRef.current = abortController;
 
     const userMsg: QaMessage = {
       id: `tmp-user-${Date.now()}`,
@@ -66,7 +69,7 @@ export default function QaPanel({ runId }: { runId: string }) {
     setMessages((prev) => [...prev, userMsg, assistantMsg]);
 
     try {
-      const stream = askQuestionStream(runId, question);
+      const stream = askQuestionStream(runId, question, abortController.signal);
       for await (const event of stream) {
         if (event.type === "token" && event.content) {
           assistantMsg.content += event.content;
@@ -84,14 +87,39 @@ export default function QaPanel({ runId }: { runId: string }) {
                 : m,
             ),
           );
+        } else if (event.type === "error") {
+          const message = event.content || text(language, "qaError");
+          assistantMsg.content = message;
+          setError(message);
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantMsg.id ? { ...m, content: assistantMsg.content } : m,
+            ),
+          );
         }
       }
-    } catch {
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        setError(text(language, "qaStopped"));
+        try {
+          setMessages(await getQaHistory(runId));
+        } catch {
+          // Keep the optimistic partial message if history reload fails.
+        }
+        return;
+      }
       setError(text(language, "qaError"));
     } finally {
+      if (abortRef.current === abortController) {
+        abortRef.current = null;
+      }
       setLoading(false);
     }
   }, [runId, input, loading, language]);
+
+  const handleStop = useCallback(async () => {
+    abortRef.current?.abort();
+  }, []);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -139,8 +167,13 @@ export default function QaPanel({ runId }: { runId: string }) {
           rows={2}
           disabled={loading}
         />
-        <button className="button" onClick={handleSend} disabled={loading || !input.trim()} type="button">
-          {text(language, "qaSend")}
+        <button
+          className="button"
+          onClick={loading ? handleStop : handleSend}
+          disabled={!loading && !input.trim()}
+          type="button"
+        >
+          {loading ? text(language, "qaStop") : text(language, "qaSend")}
         </button>
       </div>
     </section>

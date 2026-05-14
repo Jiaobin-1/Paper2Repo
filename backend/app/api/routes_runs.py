@@ -6,9 +6,20 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Query, Response
 from fastapi.responses import FileResponse
 
-from app.core.database import delete_run, get_analysis_result, get_report, get_run, list_runs
-from app.schemas.paper import RunListItemResponse, RunResponse
+from app.core.database import (
+    delete_run,
+    get_analysis_result,
+    get_report,
+    get_run,
+    get_runs_by_batch,
+    list_runs,
+    request_analysis_cancel,
+    update_run_status,
+)
+from app.schemas.paper import BatchStatusResponse, RunListItemResponse, RunResponse
 from app.services.code_skeleton import generate_skeleton_zip
+from app.services.html_exporter import build_report_html
+from app.services.latex_exporter import build_report_latex
 from app.services.pdf_exporter import build_report_pdf
 
 router = APIRouter(
@@ -29,6 +40,22 @@ def get_runs(
     limit: int = Query(20, ge=1, le=100, description="Maximum number of results"),
 ) -> list[RunListItemResponse]:
     return [RunListItemResponse(**run) for run in list_runs(paper_id=paper_id, limit=limit)]
+
+
+@router.get(
+    "/batches/{batch_id}",
+    response_model=BatchStatusResponse,
+    summary="Get batch status",
+    description="Retrieve the status of all runs in a batch.",
+)
+def get_batch_status(batch_id: str) -> BatchStatusResponse:
+    runs = get_runs_by_batch(batch_id)
+    if not runs:
+        raise HTTPException(status_code=404, detail="Batch not found.")
+    return BatchStatusResponse(
+        batch_id=batch_id,
+        runs=[RunListItemResponse(**run) for run in runs],
+    )
 
 
 @router.get(
@@ -63,6 +90,33 @@ def delete_run_detail(run_id: str) -> RunResponse:
     if report and report.get("file_path"):
         Path(report["file_path"]).unlink(missing_ok=True)
     return RunResponse(**deleted_run)
+
+
+@router.post(
+    "/{run_id}/cancel",
+    response_model=RunResponse,
+    summary="Cancel a run",
+    description="Request cancellation for a pending or running analysis run.",
+)
+def cancel_run_detail(run_id: str) -> RunResponse:
+    run = get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found.")
+    if run["status"] not in {"pending", "running"}:
+        return RunResponse(**run)
+    requested = request_analysis_cancel(run_id)
+    if not requested:
+        raise HTTPException(status_code=409, detail="Run cannot be canceled.")
+    update_run_status(
+        run_id,
+        "failed",
+        error_message="Analysis cancellation requested.",
+        completed=True,
+        current_step="failed",
+    )
+    updated = get_run(run_id)
+    assert updated is not None
+    return RunResponse(**updated)
 
 
 @router.get(
@@ -156,6 +210,52 @@ def download_run_report_pdf(run_id: str) -> Response:
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get(
+    "/{run_id}/report.html",
+    summary="Download HTML report",
+    description="Download the report as a self-contained HTML file with embedded CSS.",
+)
+def download_run_report_html(run_id: str) -> Response:
+    run = get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found.")
+
+    report = get_report(run_id)
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found.")
+
+    html_content = build_report_html(title=report["title"], markdown=report["content"])
+    filename = _safe_report_filename(report["title"], run_id, "html")
+    return Response(
+        content=html_content,
+        media_type="text/html; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get(
+    "/{run_id}/report.tex",
+    summary="Download LaTeX report",
+    description="Download the report as a LaTeX source file.",
+)
+def download_run_report_latex(run_id: str) -> Response:
+    run = get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found.")
+
+    report = get_report(run_id)
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found.")
+
+    tex_content = build_report_latex(title=report["title"], markdown=report["content"])
+    filename = _safe_report_filename(report["title"], run_id, "tex")
+    return Response(
+        content=tex_content,
+        media_type="application/x-latex; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 

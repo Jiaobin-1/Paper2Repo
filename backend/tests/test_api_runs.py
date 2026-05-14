@@ -65,6 +65,23 @@ class TestGetRuns:
         assert resp.status_code == 200
         assert len(resp.json()) == 2
 
+    def test_list_runs_normalizes_completed_progress(self, isolated_settings):
+        init_db()
+        pdf_path = isolated_settings / "paper.pdf"
+        pdf_path.write_bytes(b"%PDF-1.4\n%%EOF")
+        paper = create_paper("paper.pdf", str(pdf_path), pdf_path.stat().st_size)
+        run = create_run(paper["id"])
+        update_run_status(run["id"], "completed", completed=True)
+
+        with _client() as client:
+            resp = client.get("/api/runs")
+
+        assert resp.status_code == 200
+        item = next(r for r in resp.json() if r["id"] == run["id"])
+        assert item["status"] == "completed"
+        assert item["current_step"] == "completed"
+        assert item["progress_percent"] == 100
+
 
 class TestGetRunAnalysis:
     def test_returns_analysis_result(self, isolated_settings):

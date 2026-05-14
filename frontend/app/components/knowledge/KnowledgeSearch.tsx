@@ -78,8 +78,8 @@ export default function KnowledgeSearch() {
               </Link>
             ) : null}
           </div>
-          {group.chunks.map((chunk, i) => (
-            <div key={i} className="knowledge-chunk">
+          {group.chunks.map((chunk) => (
+            <div key={`${chunk.paper_id}-${chunk.chunk_index}`} className="knowledge-chunk">
               <div className="knowledge-chunk-meta">
                 {chunk.section_title ? <span className="knowledge-section">{chunk.section_title}</span> : null}
                 <span className="muted">p.{chunk.page_start}</span>

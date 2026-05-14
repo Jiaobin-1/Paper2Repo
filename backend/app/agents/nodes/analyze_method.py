@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 
 from app.agents.nodes.node_utils import context_block, evidence_sentence, llm_or_fallback
-from app.agents.prompts import ANALYZE_METHOD_PROMPT, system_prompt_for_language
+from app.agents.prompts import build_method_prompt, system_prompt_for_language
 from app.agents.state import PaperAnalysisState
 from app.schemas.common import MissingItem
 from app.schemas.method import AlgorithmStep, MethodAnalysis, MethodModule
@@ -34,37 +34,41 @@ def _fallback_modules(context) -> list[MethodModule]:
         sentence = evidence_sentence(context, keywords, "")
         if not sentence:
             continue
+        evidence = collect_evidence(context, sentence, keywords=keywords, limit=1)
         modules.append(
             MethodModule(
-                name=name,
+                module_name=name,
+                paper_section=evidence[0].section if evidence else "method",
                 responsibility=sentence,
-                inputs=["待从论文方法部分确认"],
-                outputs=["待从论文方法部分确认"],
+                inferred_inputs=[],
+                missing_inputs=["待从论文方法部分确认"],
+                inferred_outputs=[],
+                missing_outputs=["待从论文方法部分确认"],
                 implementation_notes=["该模块来自方法相关片段的关键词抽取，后续应根据原文细化接口。"],
-                implementation_priority="must" if name in {"data_or_input_processing", "core_model_or_reasoning"} else "should",
-                interface_contract="输入输出接口未在当前片段中完整给出，需要复现前补齐。",
-                evidence=collect_evidence(context, sentence, keywords=keywords, limit=1),
+                evidence_quote=evidence[0].quote if evidence else "",
+                confidence="medium" if evidence else "low",
             )
         )
     if modules:
         return modules
+    evidence = collect_evidence(context, "方法核心", keywords=["method", "approach", "framework"], limit=1)
     return [
         MethodModule(
-            name="method_core",
+            module_name="method_core",
+            paper_section=evidence[0].section if evidence else "method",
             responsibility=evidence_sentence(context, ["method", "approach", "framework"], "当前 PDF 片段未明确抽取到方法模块。"),
-            inputs=["paper-defined inputs"],
-            outputs=["paper-defined outputs"],
+            missing_inputs=["paper-defined inputs"],
+            missing_outputs=["paper-defined outputs"],
             implementation_notes=["需要人工核查论文方法章节中的模块边界。"],
-            implementation_priority="must",
-            interface_contract="方法核心输入输出需要从 Method/Algorithm 章节人工确认。",
-            evidence=collect_evidence(context, "方法核心", keywords=["method", "approach", "framework"], limit=1),
+            evidence_quote=evidence[0].quote if evidence else "",
+            confidence="low",
         )
     ]
 
 
 def analyze_method_node(state: PaperAnalysisState) -> PaperAnalysisState:
     chunks = state["chunked_paper"].chunks
-    context = retrieve_analysis_context(chunks, "method", top_k=10)
+    context = retrieve_analysis_context(chunks, "method", top_k=10, embedding_cache=state.get("retrieval_cache"))
 
     raw_method_text = "\n".join(item.content for item in context)
     framework = evidence_sentence(
@@ -79,6 +83,7 @@ def analyze_method_node(state: PaperAnalysisState) -> PaperAnalysisState:
             + [dep for dep in ["PyTorch", "Transformers", "FAISS", "OpenAI-compatible API"] if re.search(dep, raw_method_text, re.IGNORECASE)]
         )
     )
+    fallback_modules = _fallback_modules(context)
     missing_items: list[MissingItem] = []
     if not formulas:
         missing_items.append(
@@ -90,7 +95,7 @@ def analyze_method_node(state: PaperAnalysisState) -> PaperAnalysisState:
                 suggested_action="复现前核查 Method、Algorithm、Appendix 中的公式和伪代码。",
             )
         )
-    if "待从论文方法部分确认" in " ".join(note for module in _fallback_modules(context) for note in module.inputs + module.outputs):
+    if any(module.missing_inputs or module.missing_outputs for module in fallback_modules):
         missing_items.append(
             MissingItem(
                 category="implementation_detail",
@@ -102,7 +107,7 @@ def analyze_method_node(state: PaperAnalysisState) -> PaperAnalysisState:
         )
     fallback = MethodAnalysis(
         method_summary=framework,
-        modules=_fallback_modules(context),
+        modules=fallback_modules,
         key_formulas=formulas,
         algorithm_steps=[
             AlgorithmStep(
@@ -139,9 +144,11 @@ def analyze_method_node(state: PaperAnalysisState) -> PaperAnalysisState:
         ),
         missing_items=missing_items,
     )
+    classification = state.get("classification")
+    paper_types: list[str] = list(classification.paper_types) if classification else []
     method, _used_llm = llm_or_fallback(
         system_prompt=system_prompt_for_language(state.get("report_language")),
-        task_prompt=ANALYZE_METHOD_PROMPT,
+        task_prompt=build_method_prompt(paper_types),
         schema_model=MethodAnalysis,
         fallback=fallback,
         context=context_block(context),

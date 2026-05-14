@@ -17,11 +17,7 @@ def _minimal_metadata(title: str = "Test Paper") -> PaperMetadata:
 
 def _minimal_classification() -> PaperTypeClassification:
     return PaperTypeClassification(
-        domain="llm",
-        paper_type="experimental",
-        reproduction_mode="inference_pipeline",
-        difficulty="medium",
-        suitability_for_mvp="good",
+        paper_types=["llm_application"],
         reasons=["reason one"],
         required_resources=["GPU"],
         likely_blockers=["data access"],
@@ -35,7 +31,7 @@ def _minimal_understanding() -> PaperUnderstanding:
         main_contributions=["Contribution A"],
         overall_idea="The idea.",
         conclusion="The conclusion.",
-        limitations=["Limitation A"],
+        limitations=[{"limitation_type": "stated_limitations", "description": "Limitation A"}],
         applicable_scenarios=["Scenario A"],
         key_assumptions=["Assumption A"],
         reading_tasks=[],
@@ -76,9 +72,15 @@ def _minimal_experiments() -> ExperimentAnalysis:
 
 def _minimal_reproduction() -> ReproductionPlan:
     return ReproductionPlan(
-        feasibility_level="medium",
+        mvp_pipeline_feasibility="medium",
+        full_reproduction_difficulty="medium",
+        report_confidence="medium",
+        dependency_availability_difficulty="medium",
+        data_availability_difficulty="medium",
+        compute_cost_difficulty="medium",
+        implementation_complexity_difficulty="medium",
         feasibility_summary="Feasible.",
-        minimum_reproduction_goal="Goal.",
+        minimum_reproduction_goal="pipeline_reproduction",
         recommended_first_experiment="First exp.",
         reproduction_scope=["Scope A"],
         required_modules=[],
@@ -94,7 +96,6 @@ def _minimal_reproduction() -> ReproductionPlan:
         evidence_refs=[],
         blocking_missing_items=[],
         audit_summary="Audit.",
-        confidence="medium",
     )
 
 
@@ -106,6 +107,7 @@ class TestBuildMarkdownReport:
         )
         assert "## 0. 复现审计摘要" in report
         assert "## 1. 论文基本信息" in report
+        assert "### 复现难度拆解" in report
 
     def test_en_output_contains_english_headers(self):
         report = build_markdown_report(
@@ -114,6 +116,7 @@ class TestBuildMarkdownReport:
         )
         assert "## 0. Reproduction Audit Summary" in report
         assert "## 1. Paper Metadata" in report
+        assert "### Difficulty Breakdown" in report
 
     def test_minimal_inputs_produce_valid_report(self):
         report = build_markdown_report(
@@ -133,13 +136,13 @@ class TestBuildMarkdownReport:
     def test_evidence_table_formatting(self):
         understanding = _minimal_understanding()
         understanding.evidence_refs = [
-            EvidenceRef(claim="Claim A", page="p.3", section="Sec", quote="Quote text", role="method"),
+            EvidenceRef(claim_type="other", page="p.3", section="Sec", quote="Quote text"),
         ]
         report = build_markdown_report(
             _minimal_metadata(), _minimal_classification(), understanding,
             _minimal_method(), _minimal_experiments(), _minimal_reproduction(),
         )
-        assert "Claim A" in report
+        assert "Quote text" in report
         assert "Quote text" in report
 
     def test_missing_table_formatting(self):

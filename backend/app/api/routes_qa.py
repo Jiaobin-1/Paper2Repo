@@ -54,12 +54,14 @@ def ask_question(run_id: str, payload: QaRequest) -> list[QaMessageResponse]:
 
     paper_id = run["paper_id"]
     model_name = run.get("model_name")
+    language = get_report_language()
 
     user_msg, assistant_msg = answer_question(
         run_id=run_id,
         paper_id=paper_id,
         question=payload.question,
         model_name=model_name,
+        language=language,
     )
     return [QaMessageResponse(**user_msg), QaMessageResponse(**assistant_msg)]
 
@@ -96,27 +98,40 @@ def ask_question_stream(run_id: str, payload: QaRequest):
     client = LLMClient(model_name=model_name)
     if not client.is_configured():
         fallback = "LLM 未配置，无法生成回答。请在设置中配置 OpenAI API Key。" if language == "zh" else "LLM is not configured. Please set up the OpenAI API Key in settings."
-        save_qa_message(run_id, paper_id, "assistant", fallback)
+        assistant_msg = save_qa_message(run_id, paper_id, "assistant", fallback)
 
         def _fallback_stream():
             yield f"data: {json.dumps({'type': 'token', 'content': fallback}, ensure_ascii=False)}\n\n"
-            yield f"data: {json.dumps({'type': 'done', 'message_id': ''}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'type': 'done', 'message_id': assistant_msg['id']}, ensure_ascii=False)}\n\n"
 
         return StreamingResponse(_fallback_stream(), media_type="text/event-stream")
 
     def _generate():
         full_response = ""
+        saved_msg = None
+
+        def save_once():
+            nonlocal saved_msg
+            if saved_msg is None and full_response:
+                saved_msg = save_qa_message(run_id, paper_id, "assistant", full_response)
+            return saved_msg
+
         try:
             for token in client.chat_stream(system_prompt=full_system, messages=messages):
                 full_response += token
                 yield f"data: {json.dumps({'type': 'token', 'content': token}, ensure_ascii=False)}\n\n"
+        except GeneratorExit:
+            save_once()
+            raise
         except Exception:
             error_msg = "回答生成失败，请稍后重试。" if language == "zh" else "Failed to generate answer. Please try again."
             if not full_response:
                 full_response = error_msg
-            yield f"data: {json.dumps({'type': 'token', 'content': error_msg}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'type': 'error', 'content': error_msg}, ensure_ascii=False)}\n\n"
 
-        assistant_msg = save_qa_message(run_id, paper_id, "assistant", full_response)
+        assistant_msg = save_once()
+        if assistant_msg is None:
+            assistant_msg = save_qa_message(run_id, paper_id, "assistant", "")
         yield f"data: {json.dumps({'type': 'done', 'message_id': assistant_msg['id']}, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(

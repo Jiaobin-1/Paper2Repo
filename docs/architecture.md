@@ -1,16 +1,26 @@
 # Paper2Repo Architecture
 
-Paper2Repo is a local MVP for turning AI paper PDFs into structured understanding reports and actionable reproduction plans.
+Paper2Repo is a local-first AI-paper analysis system. It turns PDFs and arXiv papers into evidence-grounded understanding reports, reproduction plans, export files, Q&A sessions, and searchable paper knowledge.
 
 ## Data Flow
 
 ```text
-PDF upload
+PDF upload / arXiv import / batch upload
 -> papers row
--> run row with selected model
--> FastAPI BackgroundTasks starts LangGraph workflow
--> parse_pdf_node
+-> run row with selected model and optional batch id
+-> recoverable analysis job
+-> FastAPI BackgroundTasks / ThreadPoolExecutor
+-> LangGraph workflow
+-> frontend polling sees progress and completion
+-> report, exports, Q&A, citations, skeleton, knowledge search
+```
+
+## Analysis Workflow
+
+```text
+parse_pdf_node
 -> chunk_paper_node
+-> extract_citations_node
 -> extract_metadata_node
 -> classify_paper_type_node
 -> understand_paper_node
@@ -19,39 +29,43 @@ PDF upload
 -> plan_reproduction_node
 -> generate_report_node
 -> persist_result_node
--> frontend polling sees completed run
--> Markdown / PDF report display and download
 ```
+
+`parse_pdf_node` and `chunk_paper_node` are critical. Later analysis nodes are recoverable: failures are captured in `node_errors`, downstream nodes continue where possible, and the generated report includes partial results plus error context.
 
 ## Main Components
 
-- `backend/app/api`: FastAPI routers for papers, runs, reports, and LLM config.
-- `backend/app/core`: settings and SQLite helpers.
-- `backend/app/schemas`: Pydantic output contracts.
-- `backend/app/services`: PDF parser, chunker, retrieval, LLM client, Markdown exporter, PDF exporter.
-- `backend/app/agents`: LangGraph state, graph, and workflow nodes.
+- `backend/app/api`: FastAPI routers for papers, runs, reports, Q&A, arXiv, comparison, citations, knowledge search, settings, and LLM config.
+- `backend/app/agents`: LangGraph workflow, state definition, prompts, and analysis nodes.
+- `backend/app/core`: settings and SQLite persistence.
+- `backend/app/schemas`: Pydantic contracts for analysis outputs and API responses.
+- `backend/app/services`: PDF parsing, chunking, retrieval, LLM client, report exporters, Q&A, code skeletons, and arXiv client.
 - `frontend/app`: Next.js App Router pages and client components.
-
-## Workflow Notes
-
-- Analysis runs are background tasks, not synchronous request work.
-- The frontend polls `GET /api/runs/{run_id}` for `current_step` and `progress_percent`.
-- `retrieve_context` is a helper used inside analysis nodes, not a LangGraph node.
-- LLM calls use OpenAI-compatible Chat Completions through environment variables.
-- If no API key is configured, nodes use local keyword-based fallback outputs.
-- The selected model is saved as a global default and copied into each new run.
+- `frontend/lib`: API client, shared types, i18n, presentation helpers.
 
 ## Storage
 
-- SQLite stores papers, chunks, runs, structured analysis JSON, reports, and app settings.
-- Uploaded PDFs and generated Markdown reports are local files.
-- Report PDF downloads are generated from saved Markdown content on demand.
+- SQLite stores papers, chunks, runs, jobs, analysis JSON, reports, settings, Q&A messages, citations, and embeddings.
+- Uploaded PDFs and generated reports are local files under configurable storage directories.
+- Markdown reports are persisted; PDF, HTML, and LaTeX downloads are generated from stored Markdown content.
+- Embeddings are stored in SQLite for local knowledge search; retrieval uses a hybrid semantic/keyword score.
 
-## MVP Constraints
+## Background Jobs
 
-- No automatic web search.
-- No vector database.
-- No full reproduction repository generation.
-- No login or multi-user isolation.
-- No distributed worker queue.
-- No complex frontend animation.
+- Each run creates a recoverable analysis job.
+- Startup recovery reclaims unfinished jobs that are safe to retry.
+- Batch analysis uses a bounded worker pool controlled by `ANALYSIS_MAX_WORKERS`.
+- Pending/running runs can be canceled through the API.
+
+## Frontend Runtime
+
+- Next.js rewrites `/api/*` to the FastAPI backend during local development.
+- The frontend polls run status and renders report/Q&A/download views when a run completes.
+- Playwright tests mock API responses for CI stability; backend integration behavior is covered by pytest.
+
+## Current Boundaries
+
+- No authentication or multi-user isolation.
+- No distributed worker queue; background work is local-process based.
+- No external vector database; embeddings are stored in local SQLite.
+- Full scientific reproduction is not generated automatically. The code skeleton is a structured starting point with TODOs and acceptance criteria.

@@ -1,5 +1,11 @@
 .DS_Store
 .env
+*.db
+*.sqlite
+*.sqlite3
+*.log
+*.docx
+!docs/**/*.docx
 CLAUDE.md
 *.pyc
 __pycache__/
@@ -10,12 +16,14 @@ __pycache__/
 htmlcov/
 
 backend/data/
+backend/storage/
 backend/storage/uploads/
 backend/storage/reports/
 
 frontend/.next/
 frontend/node_modules/
 frontend/.env.local
+frontend/.env.*.local
 frontend/tsconfig.tsbuildinfo
 frontend/out/
 frontend/test-results/

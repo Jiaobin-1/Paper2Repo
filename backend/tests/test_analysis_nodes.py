@@ -215,43 +215,43 @@ class TestClassifyPaperType:
             "A Large Language Model for Code Generation",
             "We present a large language model fine-tuned for code.",
         )
-        assert result["classification"].domain == "llm"
+        assert 'llm_application' in result['classification'].paper_types
 
     def test_agent_paper_classified_as_agent(self):
         result = self._run_classify(
             "Multi-Agent Collaboration for Task Planning",
             "We propose a multi-agent system for tool use.",
         )
-        assert result["classification"].domain == "agent"
+        assert 'agent_or_tool_use' in result['classification'].paper_types
 
     def test_cv_paper_classified_as_cv(self):
         result = self._run_classify(
             "Object Detection in Autonomous Driving",
             "We present a vision-based detection system.",
         )
-        assert result["classification"].domain == "cv"
+        assert 'cv_or_nlp_classic' in result['classification'].paper_types
 
     def test_survey_classified_correctly(self):
         result = self._run_classify(
             "A Survey of Natural Language Processing",
             "This survey reviews recent advances in NLP.",
         )
-        assert result["classification"].paper_type == "survey"
-        assert result["classification"].suitability_for_mvp == "poor"
+        assert "cv_or_nlp_classic" in result["classification"].paper_types
 
     def test_benchmark_paper_type(self):
         result = self._run_classify(
             "GLUE: A Multi-Task Benchmark",
             "We introduce a new benchmark for NLU.",
         )
-        assert result["classification"].paper_type == "benchmark"
+        assert "benchmark_or_evaluation" in result["classification"].paper_types
 
     def test_difficulty_very_high_for_large_scale(self):
         result = self._run_classify(
             "Scaling Language Models",
             "We train a billion parameter model on large-scale distributed GPU cluster.",
         )
-        assert result["classification"].difficulty == "very_high"
+        assert "Potential large-scale compute requirement" in result["classification"].likely_blockers
+        assert "GPU resources" in result["classification"].required_resources
 
 
 # ---------------------------------------------------------------------------

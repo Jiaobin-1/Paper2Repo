@@ -26,27 +26,15 @@ def search_knowledge(
     if not results:
         return []
 
-    paper_title_map: dict[str, str] = {}
-    with get_connection() as conn:
-        rows = conn.execute("SELECT id, title FROM papers").fetchall()
-        for row in rows:
-            paper_title_map[row["id"]] = row["title"]
-
-    chunk_paper_map: dict[int, str] = {}
-    with get_connection() as conn:
-        rows = conn.execute("SELECT paper_id, chunk_index FROM paper_chunks").fetchall()
-        for row in rows:
-            chunk_paper_map[row["chunk_index"]] = row["paper_id"]
-
     output: list[KnowledgeSearchResult] = []
     for r in results:
-        paper_id = chunk_paper_map.get(r.metadata.chunk_index, "")
-        paper_title = paper_title_map.get(paper_id)
+        paper_id = r.paper_id or ""
 
         output.append(
             KnowledgeSearchResult(
                 paper_id=paper_id,
-                paper_title=paper_title,
+                paper_title=r.paper_title,
+                chunk_index=r.metadata.chunk_index,
                 chunk_content=r.content,
                 section_title=r.metadata.section_title,
                 page_start=r.metadata.page_start,

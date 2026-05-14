@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 import { getArxivInfo, importArxiv } from "../../lib/api";
@@ -78,9 +77,6 @@ export default function ArxivPage() {
           <h1>{text(language, "arxivImport")}</h1>
           <p className="muted">{text(language, "arxivImportDesc")}</p>
         </div>
-        <Link className="button secondary" href="/">
-          {text(language, "backHome")}
-        </Link>
       </section>
 
       <section className="panel stack">

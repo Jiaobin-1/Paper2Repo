@@ -24,3 +24,5 @@ class RetrievedChunk(BaseModel):
     metadata: ChunkMetadata
     score: float = Field(..., ge=0)
     matched_terms: list[str] = Field(default_factory=list)
+    paper_id: str | None = None
+    paper_title: str | None = None

@@ -28,3 +28,17 @@ class RunResponse(BaseModel):
 class RunListItemResponse(RunResponse):
     paper_title: str | None = None
     paper_filename: str
+
+
+class BatchUploadResponse(BaseModel):
+    papers: list[PaperResponse]
+
+
+class BatchStartResponse(BaseModel):
+    batch_id: str
+    runs: list[RunResponse]
+
+
+class BatchStatusResponse(BaseModel):
+    batch_id: str
+    runs: list[RunListItemResponse]

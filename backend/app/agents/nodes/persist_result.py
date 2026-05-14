@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from app.agents.state import PaperAnalysisState
 from app.core.config import get_settings
 from app.core.database import (
+    create_citations,
     replace_chunks,
     save_analysis_result,
     save_report,
@@ -54,6 +55,11 @@ def persist_result_node(state: PaperAnalysisState) -> PaperAnalysisState:
 
     title = report.title if report.title else "Analysis Report"
     save_report(run_id, paper_id, title, report.content, report_path)
+
+    citations = state.get("citations")
+    if citations:
+        citation_dicts = [c.model_dump() for c in citations]
+        create_citations(run_id, paper_id, citation_dicts)
 
     persist_result = PersistResult(
         paper_id=paper_id,

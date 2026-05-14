@@ -31,9 +31,6 @@ export default function KnowledgePage() {
           <h1>{text(language, "knowledgeBase")}</h1>
           <p className="muted">{text(language, "knowledgeBaseDesc")}</p>
         </div>
-        <Link className="button secondary" href="/">
-          {text(language, "backHome")}
-        </Link>
       </section>
 
       <section className="panel stack">

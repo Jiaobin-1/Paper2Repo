@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { deleteRun, listRuns } from "../../../lib/api";
-import { formatRunStatus } from "../../../lib/runPresentation";
+import { displayProgressPercent, formatRunStatus } from "../../../lib/runPresentation";
 import { text } from "../../../lib/i18n";
 import { useAppLanguage } from "../../../lib/useAppLanguage";
 import type { RunListItem } from "../../../lib/types";
@@ -14,9 +14,12 @@ export default function RunHistory() {
   const [message, setMessage] = useState(text(language, "recentAnalysisLoading"));
   const [isLoading, setIsLoading] = useState(true);
   const [deletingRunId, setDeletingRunId] = useState<string | null>(null);
+  const hasActiveRuns = runs.some((run) => run.status === "pending" || run.status === "running");
 
-  async function loadRuns() {
-    setIsLoading(true);
+  const loadRuns = useCallback(async (options: { silent?: boolean } = {}) => {
+    if (!options.silent) {
+      setIsLoading(true);
+    }
     try {
       const items = await listRuns({ limit: 8 });
       setRuns(items);
@@ -24,16 +27,30 @@ export default function RunHistory() {
     } catch (error) {
       setMessage(error instanceof Error ? error.message : text(language, "backendOfflineLoad"));
     } finally {
-      setIsLoading(false);
+      if (!options.silent) {
+        setIsLoading(false);
+      }
     }
-  }
+  }, [language]);
 
   useEffect(() => {
-    loadRuns();
-    const onRefresh = () => loadRuns();
+    void loadRuns();
+    const onRefresh = () => {
+      void loadRuns();
+    };
     window.addEventListener("paper2repo:runs-updated", onRefresh);
     return () => window.removeEventListener("paper2repo:runs-updated", onRefresh);
-  }, [language]);
+  }, [loadRuns]);
+
+  useEffect(() => {
+    if (!hasActiveRuns) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      void loadRuns({ silent: true });
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [hasActiveRuns, loadRuns]);
 
   async function handleDelete(run: RunListItem) {
     if (!window.confirm(text(language, "deleteConfirm"))) {
@@ -58,7 +75,7 @@ export default function RunHistory() {
           <h2>{text(language, "recentAnalysis")}</h2>
           <p className="muted">{message}</p>
         </div>
-        <button className="button secondary" type="button" onClick={loadRuns} disabled={isLoading}>
+        <button className="button secondary" type="button" onClick={() => void loadRuns()} disabled={isLoading}>
           {text(language, "refresh")}
         </button>
       </div>
@@ -73,7 +90,7 @@ export default function RunHistory() {
               </div>
               <div className="history-meta">
                 <StatusBadge status={run.status} language={language} />
-                <span>{run.progress_percent}%</span>
+                <span>{displayProgressPercent(run)}%</span>
                 <span>{run.model_name || text(language, "modelNotRecorded")}</span>
               </div>
               <div className="action-row">

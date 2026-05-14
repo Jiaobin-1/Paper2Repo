@@ -6,13 +6,19 @@ from datetime import UTC, datetime, timedelta
 from app.core.config import get_settings
 from app.core.database import (
     STALE_RUN_ERROR_MESSAGE,
+    claim_analysis_job,
+    create_analysis_job,
     create_paper,
     create_run,
     delete_run,
+    fail_analysis_job,
+    get_analysis_job,
     get_connection,
     get_run,
     init_db,
+    list_recoverable_analysis_jobs,
     recover_stale_runs,
+    request_analysis_cancel,
     update_run_status,
 )
 
@@ -81,6 +87,49 @@ def test_init_db_migrates_existing_analysis_runs_without_updated_at(isolated_set
     assert row["status"] == "running"
 
 
+def test_init_db_repairs_completed_run_progress(isolated_settings):
+    settings = get_settings()
+    settings.database_path.parent.mkdir(parents=True, exist_ok=True)
+    now = datetime.now(UTC).isoformat()
+    with sqlite3.connect(settings.database_path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE analysis_runs (
+                id TEXT PRIMARY KEY,
+                paper_id TEXT NOT NULL,
+                status TEXT NOT NULL,
+                model_name TEXT,
+                current_step TEXT,
+                progress_percent INTEGER NOT NULL DEFAULT 0,
+                error_message TEXT,
+                started_at TEXT,
+                completed_at TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO analysis_runs (
+                id, paper_id, status, model_name, current_step, progress_percent,
+                error_message, started_at, completed_at, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("legacy-completed", "paper-1", "completed", "test-model", "queued", 0, None, now, None, now, now),
+        )
+
+    init_db()
+
+    repaired = get_run("legacy-completed")
+
+    assert repaired["status"] == "completed"
+    assert repaired["current_step"] == "completed"
+    assert repaired["progress_percent"] == 100
+    assert repaired["completed_at"]
+
+
 def test_recover_stale_runs_marks_only_pending_and_running(isolated_settings):
     init_db()
     pdf_path = isolated_settings / "paper.pdf"
@@ -136,3 +185,35 @@ def test_delete_run_removes_run_result_and_report_rows(isolated_settings):
     assert deleted["id"] == run["id"]
     assert get_run(run["id"]) is None
     assert get_report(run["id"]) is None
+
+
+def test_analysis_job_lifecycle_and_recovery(isolated_settings):
+    init_db()
+    pdf_path = isolated_settings / "paper.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4\n%%EOF")
+    paper = create_paper("paper.pdf", pdf_path, pdf_path.stat().st_size)
+    run = create_run(paper["id"])
+
+    job = create_analysis_job(run["id"], paper["id"], max_attempts=2)
+
+    assert job["status"] == "pending"
+    assert claim_analysis_job(run["id"]) == "claimed"
+    assert get_analysis_job(run["id"])["attempts"] == 1
+    assert fail_analysis_job(run["id"], "temporary") == "pending"
+    assert list_recoverable_analysis_jobs()[0]["run_id"] == run["id"]
+    assert claim_analysis_job(run["id"]) == "claimed"
+    assert fail_analysis_job(run["id"], "final") == "failed"
+
+
+def test_analysis_job_cancel_request(isolated_settings):
+    init_db()
+    pdf_path = isolated_settings / "paper.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4\n%%EOF")
+    paper = create_paper("paper.pdf", pdf_path, pdf_path.stat().st_size)
+    run = create_run(paper["id"])
+    create_analysis_job(run["id"], paper["id"])
+
+    assert request_analysis_cancel(run["id"]) is True
+    assert claim_analysis_job(run["id"]) == "canceled"
+    assert get_analysis_job(run["id"])["status"] == "canceled"
+    assert fail_analysis_job(run["id"], "canceled") == "canceled"

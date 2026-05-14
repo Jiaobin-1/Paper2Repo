@@ -1,6 +1,7 @@
-from typing import TypedDict
+from typing import Any, TypedDict
 
 from app.schemas.chunks import ChunkedPaper
+from app.schemas.citations import CitationInfo
 from app.schemas.classification import PaperTypeClassification
 from app.schemas.experiments import ExperimentAnalysis
 from app.schemas.metadata import PaperMetadata
@@ -17,9 +18,11 @@ class PaperAnalysisState(TypedDict, total=False):
     pdf_path: str
     model_name: str
     report_language: str
+    retrieval_cache: dict[str, Any]
 
     parsed_paper: ParsedPaper
     chunked_paper: ChunkedPaper
+    citations: list[CitationInfo]
     metadata: PaperMetadata
     classification: PaperTypeClassification
     understanding: PaperUnderstanding

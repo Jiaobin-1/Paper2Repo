@@ -1,4 +1,4 @@
-import type { AppSettings, AppSettingsUpdate, ArxivInfo, AvailableRun, ComparisonRun, KnowledgePaper, KnowledgeSearchResult, LlmConfig, Paper, PwcLink, QaMessage, Report, Run, RunListItem } from "./types";
+import type { AppSettings, AppSettingsUpdate, ArxivInfo, AvailableRun, BatchStartResponse, BatchStatusResponse, BatchUploadResponse, CitationInfo, CitationEdge, ComparisonRun, KnowledgePaper, KnowledgeSearchResult, LlmConfig, Paper, PwcLink, QaMessage, Report, Run, RunListItem } from "./types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 
@@ -94,6 +94,14 @@ export function getReportMarkdownUrl(runId: string): string {
   return `${API_BASE_URL}/api/runs/${runId}/report.md`;
 }
 
+export function getReportHtmlUrl(runId: string): string {
+  return `${API_BASE_URL}/api/runs/${runId}/report.html`;
+}
+
+export function getReportLatexUrl(runId: string): string {
+  return `${API_BASE_URL}/api/runs/${runId}/report.tex`;
+}
+
 export function getSkeletonUrl(runId: string): string {
   return `${API_BASE_URL}/api/runs/${runId}/skeleton`;
 }
@@ -183,7 +191,7 @@ export async function askQuestion(runId: string, question: string): Promise<QaMe
 }
 
 export interface StreamEvent {
-  type: "token" | "done";
+  type: "token" | "done" | "error";
   content?: string;
   message_id?: string;
 }
@@ -191,6 +199,7 @@ export interface StreamEvent {
 export async function* askQuestionStream(
   runId: string,
   question: string,
+  signal?: AbortSignal,
 ): AsyncGenerator<StreamEvent, void, unknown> {
   const response = await fetch(`${API_BASE_URL}/api/runs/${runId}/qa/stream`, {
     method: "POST",
@@ -198,6 +207,7 @@ export async function* askQuestionStream(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ question }),
+    signal,
   });
 
   if (!response.ok) {
@@ -319,6 +329,73 @@ export async function getPwcLinks(runId: string): Promise<PwcLink[]> {
 
   const data = await response.json();
   return data.links ?? [];
+}
+
+export async function getCitations(runId: string): Promise<{ run_id: string; paper_id: string; citations: CitationInfo[] }> {
+  const response = await fetch(`${API_BASE_URL}/api/runs/${runId}/citations`);
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(formatApiError(body?.detail ?? "Citations load failed."));
+  }
+
+  return response.json();
+}
+
+export async function getCitationNetwork(paperIds: string[]): Promise<{ edges: CitationEdge[] }> {
+  const params = new URLSearchParams({ paper_ids: paperIds.join(",") });
+  const response = await fetch(`${API_BASE_URL}/api/citations/network?${params.toString()}`);
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(formatApiError(body?.detail ?? "Citation network failed."));
+  }
+
+  return response.json();
+}
+
+export async function uploadPapers(files: File[]): Promise<BatchUploadResponse> {
+  const formData = new FormData();
+  for (const file of files) {
+    formData.append("files", file);
+  }
+
+  const response = await fetch(`${API_BASE_URL}/api/papers/upload-batch`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(formatApiError(body?.detail ?? "Batch upload failed."));
+  }
+
+  return response.json();
+}
+
+export async function startBatchAnalysis(paperIds: string[]): Promise<BatchStartResponse> {
+  const params = new URLSearchParams({ paper_ids: paperIds.join(",") });
+  const response = await fetch(`${API_BASE_URL}/api/papers/batch-start?${params.toString()}`, {
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(formatApiError(body?.detail ?? "Batch analysis failed."));
+  }
+
+  return response.json();
+}
+
+export async function getBatchStatus(batchId: string): Promise<BatchStatusResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/runs/batches/${batchId}`);
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(formatApiError(body?.detail ?? "Batch status failed."));
+  }
+
+  return response.json();
 }
 
 function formatApiError(detail: unknown): string {

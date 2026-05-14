@@ -73,19 +73,19 @@ export function formatProgressMessage(run: Run | null, language: LanguageCode = 
     return run.error_message || (language === "en" ? "Analysis failed." : "分析失败。");
   }
   return language === "en"
-    ? `Running: ${formatStepLabel(run.current_step, language)} (${boundedProgress(run.progress_percent)}%)`
-    : `正在执行：${formatStepLabel(run.current_step, language)}（${boundedProgress(run.progress_percent)}%）`;
+    ? `Running: ${formatStepLabel(run.current_step, language)} (${displayProgressPercent(run)}%)`
+    : `正在执行：${formatStepLabel(run.current_step, language)}（${displayProgressPercent(run)}%）`;
 }
 
 export function formatRunStatusWithProgress(run: Run | null, language: LanguageCode = "zh"): string {
   if (!run) {
     return language === "en" ? "Not started" : "等待启动";
   }
-  return `${formatRunStatus(run.status, language)} · ${boundedProgress(run.progress_percent)}%`;
+  return `${formatRunStatus(run.status, language)} · ${displayProgressPercent(run)}%`;
 }
 
 export function getStepStates(run: Run): StepState[] {
-  const progress = boundedProgress(run.progress_percent);
+  const progress = displayProgressPercent(run);
   const completedByProgress = Math.min(WORKFLOW_STEPS.length, Math.floor(progress / stepPercent()));
   const currentIndex = WORKFLOW_STEPS.findIndex((step) => step.key === run.current_step);
 
@@ -116,6 +116,16 @@ export function getStepStates(run: Run): StepState[] {
 
 export function boundedProgress(value: number | null | undefined): number {
   return Math.max(0, Math.min(100, value ?? 0));
+}
+
+export function displayProgressPercent(run: Pick<Run, "status" | "progress_percent"> | null | undefined): number {
+  if (!run) {
+    return 0;
+  }
+  if (run.status === "completed") {
+    return 100;
+  }
+  return boundedProgress(run.progress_percent);
 }
 
 function stepPercent(): number {

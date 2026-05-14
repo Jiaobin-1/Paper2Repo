@@ -1,6 +1,12 @@
 import { test, expect } from "@playwright/test";
 
+import { mockAppApis } from "./mocks";
+
 test.describe("Homepage", () => {
+  test.beforeEach(async ({ page }) => {
+    await mockAppApis(page);
+  });
+
   test("loads and displays the main heading", async ({ page }) => {
     await page.goto("/");
 

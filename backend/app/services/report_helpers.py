@@ -33,26 +33,27 @@ def _value(value: str, lang: Lang) -> str:
 def _evidence_table(items: list[EvidenceRef], lang: Lang) -> str:
     if not items:
         return (
-            f"| {lang.ev_claim} | {lang.ev_location} | {lang.ev_section} | {lang.ev_quote} |\n"
-            f"| --- | --- | --- | --- |\n"
+            f"| {lang.ev_claim} | {lang.ev_location} | {lang.ev_section} | Chunk | {lang.ev_quote} |\n"
+            f"| --- | --- | --- | --- | --- |\n"
             f"{lang.ev_empty_row}"
         )
     rows = [
-        f"| {lang.ev_claim} | {lang.ev_location} | {lang.ev_section} | {lang.ev_quote} |",
-        "| --- | --- | --- | --- |",
+        f"| {lang.ev_claim} | {lang.ev_location} | {lang.ev_section} | Chunk | {lang.ev_quote} |",
+        "| --- | --- | --- | --- | --- |",
     ]
     seen: set[tuple[str, str, str]] = set()
     for item in items:
-        key = (item.claim, item.page, item.quote)
+        key = (item.claim_type, item.page, item.quote)
         if key in seen:
             continue
         seen.add(key)
         rows.append(
             "| "
             + " | ".join([
-                _cell(item.claim or lang.ev_no_claim),
+                _cell(item.claim_type or lang.ev_no_claim),
                 _cell(item.page or lang.ev_no_location),
-                _cell(item.section or item.role or lang.ev_no_section),
+                _cell(item.section or lang.ev_no_section),
+                _cell(item.chunk_id or "-"),
                 _cell(item.quote or lang.ev_no_quote),
             ])
             + " |"

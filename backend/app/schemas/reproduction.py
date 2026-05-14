@@ -40,11 +40,20 @@ class RiskPoint(BaseModel):
 
 class ReproductionPlan(BaseModel):
     feasibility_summary: str = ""
-    feasibility_level: Literal["high", "medium", "low"] = "medium"
+    full_reproduction_difficulty: Literal["low", "medium", "high"] = "medium"
+    mvp_pipeline_feasibility: Literal["low", "medium", "high"] = "medium"
+    dependency_availability_difficulty: Literal["low", "medium", "high"] = "medium"
+    data_availability_difficulty: Literal["low", "medium", "high"] = "medium"
+    compute_cost_difficulty: Literal["low", "medium", "high"] = "medium"
+    implementation_complexity_difficulty: Literal["low", "medium", "high"] = "medium"
+    report_confidence: Literal["low", "medium", "high"] = "medium"
     audit_summary: str = ""
-    confidence: Literal["high", "medium", "low"] = "medium"
     recommended_first_experiment: str = ""
-    minimum_reproduction_goal: str = ""
+    minimum_reproduction_goal: Literal[
+        "paper_faithful_reproduction",
+        "pipeline_reproduction",
+        "sanity_check_reproduction",
+    ] = "pipeline_reproduction"
     reproduction_scope: list[str] = Field(default_factory=list)
     required_modules: list[ReproductionModule] = Field(default_factory=list)
     dataset_plan: list[str] = Field(default_factory=list)

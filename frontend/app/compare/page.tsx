@@ -65,9 +65,6 @@ export default function ComparePage() {
           <h1>{text(language, "compareTitle")}</h1>
           <p className="muted">{text(language, "compareSubtitle")}</p>
         </div>
-        <Link className="button secondary" href="/">
-          {text(language, "backHome")}
-        </Link>
       </section>
 
       <section className="panel stack">

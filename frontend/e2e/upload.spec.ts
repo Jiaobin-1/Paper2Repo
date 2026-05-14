@@ -1,34 +1,13 @@
 import { test, expect } from "@playwright/test";
 
-const mockSettings = {
-  configured: true,
-  base_url: "https://api.openai.com/v1",
-  default_model: "test",
-  available_models: ["test", "gpt-4o"],
-  ui_language: "zh",
-  report_language: "en",
-};
+import { mockAppApis } from "./mocks";
 
 test.describe("Upload flow", () => {
+  test.beforeEach(async ({ page }) => {
+    await mockAppApis(page);
+  });
+
   test("drop-zone is visible with mocked API", async ({ page }) => {
-    // Mock the settings endpoint
-    await page.route("**/api/settings", (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify(mockSettings),
-      }),
-    );
-
-    // Mock the runs endpoint
-    await page.route("**/api/runs", (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify([]),
-      }),
-    );
-
     await page.goto("/");
 
     const dropZone = page.locator(".drop-zone");
@@ -36,22 +15,6 @@ test.describe("Upload flow", () => {
   });
 
   test("shows configured model message when settings are configured", async ({ page }) => {
-    await page.route("**/api/settings", (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify(mockSettings),
-      }),
-    );
-
-    await page.route("**/api/runs", (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify([]),
-      }),
-    );
-
     await page.goto("/");
 
     // The message area should NOT show "model not configured" when settings.configured is true
@@ -61,22 +24,6 @@ test.describe("Upload flow", () => {
   });
 
   test("drop-zone has correct ARIA attributes", async ({ page }) => {
-    await page.route("**/api/settings", (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify(mockSettings),
-      }),
-    );
-
-    await page.route("**/api/runs", (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify([]),
-      }),
-    );
-
     await page.goto("/");
 
     const dropZone = page.locator(".drop-zone");
@@ -85,22 +32,6 @@ test.describe("Upload flow", () => {
   });
 
   test("upload and analyze buttons are initially disabled", async ({ page }) => {
-    await page.route("**/api/settings", (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify(mockSettings),
-      }),
-    );
-
-    await page.route("**/api/runs", (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify([]),
-      }),
-    );
-
     await page.goto("/");
 
     const buttons = page.locator(".upload-row button");
@@ -112,22 +43,6 @@ test.describe("Upload flow", () => {
   });
 
   test("drop-zone prompt text changes with language", async ({ page }) => {
-    await page.route("**/api/settings", (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify(mockSettings),
-      }),
-    );
-
-    await page.route("**/api/runs", (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify([]),
-      }),
-    );
-
     await page.goto("/");
 
     // Default language is zh, so expect the Chinese prompt
@@ -136,22 +51,6 @@ test.describe("Upload flow", () => {
   });
 
   test("task status and model info are displayed", async ({ page }) => {
-    await page.route("**/api/settings", (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify(mockSettings),
-      }),
-    );
-
-    await page.route("**/api/runs", (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify([]),
-      }),
-    );
-
     await page.goto("/");
 
     // Info blocks should be present

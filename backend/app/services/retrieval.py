@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import re
 from collections import Counter
+from typing import Any
 
 from app.schemas.chunks import ChunkMetadata, PaperChunk, RetrievedChunk
 
@@ -17,6 +18,7 @@ except ImportError:
     pass
 
 _embedding_model = None
+EmbeddingCache = dict[str, Any]
 
 
 def _get_embedding_model():
@@ -24,6 +26,10 @@ def _get_embedding_model():
     if _embedding_model is None:
         _embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
     return _embedding_model
+
+
+def new_embedding_cache() -> EmbeddingCache:
+    return {"chunk_key": None, "chunk_embeddings": None, "query_embeddings": {}}
 
 
 def _count_word(term: str, text: str) -> int:
@@ -37,11 +43,27 @@ def _terms(values: list[str]) -> list[str]:
     return terms
 
 
-def _embedding_scores(query: str, chunks: list[PaperChunk]) -> list[float]:
+def _chunks_key(chunks: list[PaperChunk]) -> tuple[tuple[int, int], ...]:
+    return tuple((chunk.metadata.chunk_index, hash(chunk.content)) for chunk in chunks)
+
+
+def _embedding_scores(query: str, chunks: list[PaperChunk], cache: EmbeddingCache | None = None) -> list[float]:
     model = _get_embedding_model()
-    query_emb = model.encode([query])
-    chunk_texts = [c.content for c in chunks]
-    chunk_embs = model.encode(chunk_texts)
+    if cache is not None:
+        query_cache = cache.setdefault("query_embeddings", {})
+        query_emb = query_cache.get(query)
+        if query_emb is None:
+            query_emb = model.encode([query])
+            query_cache[query] = query_emb
+        key = _chunks_key(chunks)
+        if cache.get("chunk_key") != key or cache.get("chunk_embeddings") is None:
+            cache["chunk_key"] = key
+            cache["chunk_embeddings"] = model.encode([c.content for c in chunks], show_progress_bar=False)
+        chunk_embs = cache["chunk_embeddings"]
+    else:
+        query_emb = model.encode([query])
+        chunk_texts = [c.content for c in chunks]
+        chunk_embs = model.encode(chunk_texts)
     similarities = np.dot(chunk_embs, query_emb.T).flatten()
     norms = np.linalg.norm(chunk_embs, axis=1) * np.linalg.norm(query_emb)
     norms = np.where(norms == 0, 1, norms)
@@ -54,6 +76,7 @@ def retrieve_context(
     section_hints: list[str] | None = None,
     keywords: list[str] | None = None,
     top_k: int = 6,
+    embedding_cache: EmbeddingCache | None = None,
 ) -> list[RetrievedChunk]:
     section_hints = section_hints or []
     keywords = keywords or []
@@ -95,7 +118,7 @@ def retrieve_context(
 
     if _HAS_EMBEDDINGS and query and chunks:
         try:
-            emb_scores = _embedding_scores(query, chunks)
+            emb_scores = _embedding_scores(query, chunks, embedding_cache)
             for r in results:
                 idx = r.metadata.chunk_index
                 if idx < len(emb_scores):
@@ -168,6 +191,8 @@ def search_knowledge_base(query: str, top_k: int = 10) -> list[RetrievedChunk]:
                 metadata=meta,
                 score=score,
                 matched_terms=[],
+                paper_id=row["paper_id"],
+                paper_title=row.get("paper_title"),
             )
         )
     return output

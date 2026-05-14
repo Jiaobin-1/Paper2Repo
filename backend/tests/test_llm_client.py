@@ -10,8 +10,71 @@ if str(BACKEND_ROOT) not in sys.path:
 import json
 
 import pytest
+from pydantic import BaseModel
 
-from app.services.llm_client import _balanced_json_from, _extract_json_object, _load_json_object
+from app.core.config import get_settings
+from app.services.llm_client import LLMClient, _balanced_json_from, _extract_json_object, _load_json_object
+
+
+class _TinySchema(BaseModel):
+    name: str
+
+
+class _FakeMessage:
+    def __init__(self, content: str) -> None:
+        self.content = content
+        self.refusal = None
+
+
+class _FakeChoice:
+    def __init__(self, content: str) -> None:
+        self.message = _FakeMessage(content)
+
+
+class _FakeChatResponse:
+    def __init__(self, content: str) -> None:
+        self.choices = [_FakeChoice(content)]
+        self.usage = {"total_tokens": 7}
+
+
+class _FakeResponsesResponse:
+    output_text = '{"name": "responses"}'
+    usage = {"total_tokens": 5}
+
+
+class _FakeChatCompletions:
+    def __init__(self, calls: list[dict], content: str = '{"name": "chat"}') -> None:
+        self.calls = calls
+        self.content = content
+
+    def create(self, **kwargs):
+        self.calls.append(kwargs)
+        return _FakeChatResponse(self.content)
+
+
+class _FakeResponses:
+    def __init__(self, calls: list[dict], fail: bool = False) -> None:
+        self.calls = calls
+        self.fail = fail
+
+    def create(self, **kwargs):
+        self.calls.append(kwargs)
+        if self.fail:
+            raise RuntimeError("responses unavailable")
+        return _FakeResponsesResponse()
+
+
+class _FakeClient:
+    def __init__(self, responses_calls: list[dict], chat_calls: list[dict], *, responses_fail: bool = False) -> None:
+        self.responses = _FakeResponses(responses_calls, fail=responses_fail)
+        self.chat = type("Chat", (), {"completions": _FakeChatCompletions(chat_calls)})()
+
+
+def _configured_client(monkeypatch, isolated_settings, base_url: str = "https://api.openai.com/v1") -> LLMClient:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_BASE_URL", base_url)
+    get_settings.cache_clear()
+    return LLMClient(model_name="test-model")
 
 # ---------------------------------------------------------------------------
 # _balanced_json_from
@@ -179,3 +242,52 @@ class TestLoadJsonObject:
         result = _load_json_object(content)
         assert "background" in result
         assert "core_problem" in result
+
+
+class TestStructuredOutputModes:
+    def test_uses_responses_structured_for_official_openai(self, isolated_settings, monkeypatch):
+        responses_calls: list[dict] = []
+        chat_calls: list[dict] = []
+        client = _configured_client(monkeypatch, isolated_settings)
+        monkeypatch.setattr(client, "client", lambda: _FakeClient(responses_calls, chat_calls))
+
+        result = client.structured_output(system_prompt="system", user_prompt="user", schema_model=_TinySchema)
+
+        assert result.name == "responses"
+        assert responses_calls[0]["store"] is False
+        assert responses_calls[0]["text"]["format"]["type"] == "json_schema"
+        assert chat_calls == []
+        assert client.last_call_meta["mode"] == "responses_structured"
+
+    def test_falls_back_to_chat_structured_when_responses_fails(self, isolated_settings, monkeypatch):
+        responses_calls: list[dict] = []
+        chat_calls: list[dict] = []
+        client = _configured_client(monkeypatch, isolated_settings)
+        monkeypatch.setattr(
+            client,
+            "client",
+            lambda: _FakeClient(responses_calls, chat_calls, responses_fail=True),
+        )
+
+        result = client.structured_output(system_prompt="system", user_prompt="user", schema_model=_TinySchema)
+
+        assert result.name == "chat"
+        assert responses_calls
+        assert chat_calls[0]["response_format"]["type"] == "json_schema"
+        assert chat_calls[0]["store"] is False
+        assert client.last_call_meta["mode"] == "chat_structured"
+        assert client.last_call_meta["attempts"] == 2
+
+    def test_non_official_base_url_uses_legacy_json_mode(self, isolated_settings, monkeypatch):
+        responses_calls: list[dict] = []
+        chat_calls: list[dict] = []
+        client = _configured_client(monkeypatch, isolated_settings, base_url="https://example.test/v1")
+        monkeypatch.setattr(client, "client", lambda: _FakeClient(responses_calls, chat_calls))
+
+        result = client.structured_output(system_prompt="system", user_prompt="user", schema_model=_TinySchema)
+
+        assert result.name == "chat"
+        assert responses_calls == []
+        assert chat_calls[0]["response_format"] == {"type": "json_object"}
+        assert "store" not in chat_calls[0]
+        assert client.last_call_meta["mode"] == "chat_json_legacy"

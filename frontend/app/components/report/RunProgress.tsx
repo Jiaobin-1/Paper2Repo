@@ -1,11 +1,11 @@
-import { boundedProgress, formatStepLabel, getStepStates, WORKFLOW_STEPS } from "../../../lib/runPresentation";
+import { displayProgressPercent, formatStepLabel, getStepStates, WORKFLOW_STEPS } from "../../../lib/runPresentation";
 import { useAppLanguage } from "../../../lib/useAppLanguage";
 import { text } from "../../../lib/i18n";
 import type { Run } from "../../../lib/types";
 
 export function WorkflowProgress({ run }: { run: Run }) {
   const language = useAppLanguage();
-  const progress = boundedProgress(run.progress_percent);
+  const progress = displayProgressPercent(run);
   const stepStates = getStepStates(run);
 
   return (

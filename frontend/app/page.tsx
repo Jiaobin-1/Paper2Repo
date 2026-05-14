@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import PaperUpload from "./components/upload/PaperUpload";
 import RunHistory from "./components/history/RunHistory";
 import { text } from "../lib/i18n";
@@ -15,20 +14,6 @@ export default function HomePage() {
         <div>
           <h1>Paper2Repo</h1>
           <p className="muted">{text(language, "appSubtitle")}</p>
-        </div>
-        <div className="action-row">
-          <Link className="button secondary" href="/arxiv">
-            {text(language, "arxivImport")}
-          </Link>
-          <Link className="button secondary" href="/knowledge">
-            {text(language, "knowledgeBase")}
-          </Link>
-          <Link className="button secondary" href="/compare">
-            {text(language, "compare")}
-          </Link>
-          <Link className="button secondary" href="/settings">
-            {text(language, "settings")}
-          </Link>
         </div>
       </section>
 

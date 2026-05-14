@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
+import time
 from collections.abc import Generator
-from typing import TypeVar
+from typing import Any, TypeVar
 
 from openai import OpenAI
 from pydantic import BaseModel
@@ -11,14 +13,17 @@ from pydantic import BaseModel
 from app.core.config import get_settings
 
 SchemaT = TypeVar("SchemaT", bound=BaseModel)
+logger = logging.getLogger(__name__)
 
 
 class LLMClient:
     _client: OpenAI | None = None
+    _client_key: tuple[str, str, float] | None = None
 
     def __init__(self, model_name: str | None = None) -> None:
         self.settings = get_settings()
         self.model_name = model_name or self.settings.openai_model
+        self.last_call_meta: dict[str, object] = {}
 
     def is_configured(self) -> bool:
         return bool(self.settings.openai_api_key)
@@ -26,8 +31,18 @@ class LLMClient:
     def client(self) -> OpenAI:
         if not self.is_configured():
             raise RuntimeError("OPENAI_API_KEY is not configured.")
-        if LLMClient._client is None:
-            LLMClient._client = OpenAI(api_key=self.settings.openai_api_key, base_url=self.settings.openai_base_url)
+        client_key = (
+            self.settings.openai_api_key,
+            self.settings.openai_base_url,
+            self.settings.openai_timeout_seconds,
+        )
+        if LLMClient._client is None or LLMClient._client_key != client_key:
+            LLMClient._client = OpenAI(
+                api_key=self.settings.openai_api_key,
+                base_url=self.settings.openai_base_url,
+                timeout=self.settings.openai_timeout_seconds,
+            )
+            LLMClient._client_key = client_key
         return LLMClient._client
 
     def structured_output(
@@ -38,12 +53,138 @@ class LLMClient:
         schema_model: type[SchemaT],
         temperature: float = 0.2,
     ) -> SchemaT:
-        schema = json.dumps(schema_model.model_json_schema(), ensure_ascii=False)
+        attempts = 0
+        errors: list[str] = []
+        if self._supports_responses_api():
+            attempts += 1
+            try:
+                return self._structured_output_responses(
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                    schema_model=schema_model,
+                    temperature=temperature,
+                    attempts=attempts,
+                )
+            except Exception as exc:
+                errors.append(f"responses_structured: {exc}")
+                logger.warning("Responses structured output failed; falling back to Chat Completions", exc_info=True)
+
+            attempts += 1
+            try:
+                return self._structured_output_chat_schema(
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                    schema_model=schema_model,
+                    temperature=temperature,
+                    attempts=attempts,
+                )
+            except Exception as exc:
+                errors.append(f"chat_structured: {exc}")
+                logger.warning("Chat structured output failed; falling back to JSON mode", exc_info=True)
+
+        attempts += 1
+        try:
+            return self._structured_output_json_legacy(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                schema_model=schema_model,
+                temperature=temperature,
+                attempts=attempts,
+            )
+        except Exception as exc:
+            errors.append(f"chat_json_legacy: {exc}")
+            self.last_call_meta = {
+                "mode": "chat_json_legacy",
+                "model": self.model_name,
+                "schema": schema_model.__name__,
+                "attempts": attempts,
+                "errors": errors,
+            }
+            raise
+
+    def _structured_output_responses(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        schema_model: type[SchemaT],
+        temperature: float,
+        attempts: int,
+    ) -> SchemaT:
+        start = time.perf_counter()
+        response = self.client().responses.create(
+            model=self.model_name,
+            instructions=system_prompt,
+            input=user_prompt,
+            temperature=temperature,
+            store=False,
+            text={
+                "format": {
+                    "type": "json_schema",
+                    "name": _schema_name(schema_model),
+                    "schema": schema_model.model_json_schema(),
+                    "strict": True,
+                }
+            },
+        )
+        content = _response_output_text(response)
+        result = schema_model.model_validate(_load_json_object(content))
+        self._record_call("responses_structured", schema_model, response, start, attempts)
+        return result
+
+    def _structured_output_chat_schema(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        schema_model: type[SchemaT],
+        temperature: float,
+        attempts: int,
+    ) -> SchemaT:
+        start = time.perf_counter()
         response = self.client().chat.completions.create(
             model=self.model_name,
             temperature=temperature,
-            response_format={"type": "json_object"},
+            store=False,
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": _schema_name(schema_model),
+                    "schema": schema_model.model_json_schema(),
+                    "strict": True,
+                },
+            },
             messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        )
+        if not response.choices:
+            raise RuntimeError("LLM returned an empty response with no choices.")
+        message = response.choices[0].message
+        if getattr(message, "refusal", None):
+            raise RuntimeError(f"LLM refused structured output: {message.refusal}")
+        content = message.content or "{}"
+        result = schema_model.model_validate(_load_json_object(content))
+        self._record_call("chat_structured", schema_model, response, start, attempts)
+        return result
+
+    def _structured_output_json_legacy(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        schema_model: type[SchemaT],
+        temperature: float,
+        attempts: int,
+    ) -> SchemaT:
+        start = time.perf_counter()
+        schema = json.dumps(schema_model.model_json_schema(), ensure_ascii=False)
+        kwargs: dict[str, Any] = {
+            "model": self.model_name,
+            "temperature": temperature,
+            "response_format": {"type": "json_object"},
+            "messages": [
                 {"role": "system", "content": system_prompt},
                 {
                     "role": "user",
@@ -54,11 +195,16 @@ class LLMClient:
                     ),
                 },
             ],
-        )
+        }
+        if self._is_official_openai_base_url():
+            kwargs["store"] = False
+        response = self.client().chat.completions.create(**kwargs)  # type: ignore[call-overload]
         if not response.choices:
             raise RuntimeError("LLM returned an empty response with no choices.")
         content = response.choices[0].message.content or "{}"
-        return schema_model.model_validate(_load_json_object(content))
+        result = schema_model.model_validate(_load_json_object(content))
+        self._record_call("chat_json_legacy", schema_model, response, start, attempts)
+        return result
 
     def chat(
         self,
@@ -69,11 +215,14 @@ class LLMClient:
     ) -> str:
         full_messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
         full_messages.extend(messages)
-        response = self.client().chat.completions.create(
-            model=self.model_name,
-            temperature=temperature,
-            messages=full_messages,  # type: ignore[arg-type]
-        )
+        kwargs: dict[str, Any] = {
+            "model": self.model_name,
+            "temperature": temperature,
+            "messages": full_messages,  # type: ignore[arg-type]
+        }
+        if self._is_official_openai_base_url():
+            kwargs["store"] = False
+        response = self.client().chat.completions.create(**kwargs)  # type: ignore[call-overload]
         if not response.choices:
             raise RuntimeError("LLM returned an empty response with no choices.")
         return response.choices[0].message.content or ""
@@ -87,15 +236,71 @@ class LLMClient:
     ) -> Generator[str, None, None]:
         full_messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
         full_messages.extend(messages)
-        stream = self.client().chat.completions.create(
-            model=self.model_name,
-            temperature=temperature,
-            messages=full_messages,  # type: ignore[arg-type]
-            stream=True,
-        )
+        kwargs: dict[str, Any] = {
+            "model": self.model_name,
+            "temperature": temperature,
+            "messages": full_messages,  # type: ignore[arg-type]
+            "stream": True,
+        }
+        if self._is_official_openai_base_url():
+            kwargs["store"] = False
+        stream = self.client().chat.completions.create(**kwargs)  # type: ignore[call-overload]
         for chunk in stream:
             if chunk.choices and chunk.choices[0].delta.content:
                 yield chunk.choices[0].delta.content
+
+    def _supports_responses_api(self) -> bool:
+        return self._is_official_openai_base_url() and hasattr(self.client(), "responses")
+
+    def _is_official_openai_base_url(self) -> bool:
+        return str(self.settings.openai_base_url).rstrip("/") == "https://api.openai.com/v1"
+
+    def _record_call(
+        self,
+        mode: str,
+        schema_model: type[BaseModel],
+        response,
+        start: float,
+        attempts: int,
+    ) -> None:
+        self.last_call_meta = {
+            "mode": mode,
+            "model": self.model_name,
+            "schema": schema_model.__name__,
+            "attempts": attempts,
+            "latency_ms": round((time.perf_counter() - start) * 1000, 2),
+            "usage": _usage_dict(getattr(response, "usage", None)),
+        }
+        logger.info("LLM structured call completed", extra={"llm_call": self.last_call_meta})
+
+
+def _schema_name(schema_model: type[BaseModel]) -> str:
+    return re.sub(r"[^A-Za-z0-9_]+", "_", schema_model.__name__)[:64] or "StructuredOutput"
+
+
+def _response_output_text(response) -> str:
+    output_text = getattr(response, "output_text", None)
+    if output_text:
+        return output_text
+    parts: list[str] = []
+    for item in getattr(response, "output", []) or []:
+        for content in getattr(item, "content", []) or []:
+            text = getattr(content, "text", None)
+            if text:
+                parts.append(text)
+    if parts:
+        return "\n".join(parts)
+    raise RuntimeError("LLM returned an empty response.")
+
+
+def _usage_dict(usage) -> dict | None:
+    if usage is None:
+        return None
+    if hasattr(usage, "model_dump"):
+        return usage.model_dump()
+    if isinstance(usage, dict):
+        return usage
+    return dict(getattr(usage, "__dict__", {}))
 
 
 def _load_json_object(content: str) -> dict:

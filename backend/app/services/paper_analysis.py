@@ -5,8 +5,8 @@ from collections.abc import Iterable
 from typing import TypedDict
 
 from app.schemas.chunks import PaperChunk, RetrievedChunk
-from app.schemas.common import EvidenceRef, MissingItem
-from app.services.retrieval import retrieve_context
+from app.schemas.common import ClaimType, EvidenceRef, MissingItem
+from app.services.retrieval import EmbeddingCache, retrieve_context
 
 
 class _AnalysisViewConfig(TypedDict):
@@ -77,6 +77,7 @@ def retrieve_analysis_context(
     view: str,
     *,
     top_k: int = 10,
+    embedding_cache: EmbeddingCache | None = None,
 ) -> list[RetrievedChunk]:
     config = ANALYSIS_VIEWS[view]
     return retrieve_context(
@@ -85,6 +86,7 @@ def retrieve_analysis_context(
         section_hints=config["section_hints"],
         keywords=config["keywords"],
         top_k=top_k,
+        embedding_cache=embedding_cache,
     )
 
 
@@ -100,12 +102,37 @@ def evidence_from_chunk(
     if item.metadata.page_start != item.metadata.page_end:
         page = f"pp.{item.metadata.page_start}-{item.metadata.page_end}"
     return EvidenceRef(
-        claim=claim,
+        claim_type=_claim_type_from_text(claim),
         page=page,
-        section=item.metadata.section_title or "unknown",
+        section=item.metadata.section_title or chunk_role(item) or "unknown",
+        chunk_id=f"chunk {item.metadata.chunk_index}",
         quote=quote,
-        role=chunk_role(item),
     )
+
+
+def _claim_type_from_text(claim: str) -> ClaimType:
+    text = claim.lower()
+    if any(term in text for term in ["problem", "challenge", "核心问题", "研究问题", "动机"]):
+        return "problem"
+    if any(term in text for term in ["method", "framework", "approach", "方法", "框架", "核心方法"]):
+        return "method_overview"
+    if any(term in text for term in ["module", "模块"]):
+        return "key_module"
+    if any(term in text for term in ["formula", "algorithm", "公式", "算法"]):
+        return "algorithm_formula"
+    if any(term in text for term in ["dataset", "data", "数据"]):
+        return "data_construction"
+    if any(term in text for term in ["training", "hyperparameter", "训练", "超参数"]):
+        return "training_detail"
+    if any(term in text for term in ["evaluation", "metric", "protocol", "评价", "指标"]):
+        return "evaluation_protocol"
+    if any(term in text for term in ["result", "performance", "结果", "效果"]):
+        return "main_result"
+    if any(term in text for term in ["limitation", "risk", "局限", "风险"]):
+        return "limitation"
+    if any(term in text for term in ["reproduction", "reproducibility", "复现"]):
+        return "reproducibility"
+    return "other"
 
 
 def collect_evidence(

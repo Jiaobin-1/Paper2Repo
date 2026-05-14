@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 from app.api.routes_papers import run_analysis_background
 from app.core.config import get_settings
-from app.core.database import create_paper, create_run, update_paper_title
+from app.core.database import create_analysis_job, create_paper, create_run, update_paper_title
 from app.schemas.paper import PaperResponse
 from app.services.arxiv_client import (
     download_arxiv_pdf,
@@ -68,6 +68,7 @@ def import_arxiv(
         update_paper_title(paper["id"], title)
 
     run = create_run(paper["id"])
+    create_analysis_job(run["id"], paper["id"])
     background_tasks.add_task(run_analysis_background, paper["id"], run["id"], str(pdf_path), run.get("model_name"))
 
     return PaperResponse(**paper)
@@ -127,6 +128,7 @@ def compare_versions(
                 arxiv_id=vid,
             )
             run = create_run(paper["id"])
+            create_analysis_job(run["id"], paper["id"])
             background_tasks.add_task(
                 run_analysis_background, paper["id"], run["id"], str(pdf_path), run.get("model_name"),
             )

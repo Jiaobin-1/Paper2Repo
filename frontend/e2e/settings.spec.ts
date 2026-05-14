@@ -1,6 +1,12 @@
 import { test, expect } from "@playwright/test";
 
+import { mockAppApis } from "./mocks";
+
 test.describe("Settings page", () => {
+  test.beforeEach(async ({ page }) => {
+    await mockAppApis(page);
+  });
+
   test("loads and displays the settings heading", async ({ page }) => {
     await page.goto("/settings");
 
@@ -10,12 +16,12 @@ test.describe("Settings page", () => {
     await expect(heading).toHaveText("设置");
   });
 
-  test("displays the back-home link", async ({ page }) => {
+  test("displays the nav bar with home link", async ({ page }) => {
     await page.goto("/settings");
 
-    const backLink = page.locator('a[href="/"]');
-    await expect(backLink).toBeVisible();
-    await expect(backLink).toContainText("返回首页");
+    const navBrand = page.locator(".nav-brand");
+    await expect(navBrand).toBeVisible();
+    await expect(navBrand).toContainText("Paper2Repo");
   });
 
   test("displays the UI language select", async ({ page }) => {
@@ -61,7 +67,7 @@ test.describe("Settings page", () => {
   test("displays the save button", async ({ page }) => {
     await page.goto("/settings");
 
-    const saveButton = page.locator('button[type="button"]');
+    const saveButton = page.locator('button[type="button"].button');
     await expect(saveButton).toBeVisible();
     await expect(saveButton).toContainText("保存设置");
   });

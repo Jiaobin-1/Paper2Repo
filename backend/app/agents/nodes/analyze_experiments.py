@@ -59,7 +59,7 @@ def _extract_metrics(text: str) -> list[str]:
 
 def analyze_experiments_node(state: PaperAnalysisState) -> PaperAnalysisState:
     chunks = state["chunked_paper"].chunks
-    context = retrieve_analysis_context(chunks, "experiment", top_k=10)
+    context = retrieve_analysis_context(chunks, "experiment", top_k=10, embedding_cache=state.get("retrieval_cache"))
     text = " ".join(item.content for item in context)
     metrics = _extract_metrics(text)
     dataset_names = _extract_dataset_names(text)

@@ -16,15 +16,9 @@ from app.services.paper_analysis import audit_reproduction_gaps, collect_evidenc
 
 def plan_reproduction_node(state: PaperAnalysisState) -> PaperAnalysisState:
     classification = state["classification"]
+    paper_types = set(classification.paper_types)
     chunks = state["chunked_paper"].chunks
-    context = retrieve_analysis_context(chunks, "missing_info", top_k=10)
-
-    feasibility_level = "medium"
-    if classification.suitability_for_mvp == "good":
-        feasibility_level = "high"
-    elif classification.suitability_for_mvp == "poor" or classification.difficulty == "very_high":
-        feasibility_level = "low"
-
+    context = retrieve_analysis_context(chunks, "missing_info", top_k=10, embedding_cache=state.get("retrieval_cache"))
     datasets = [dataset.name for dataset in state["experiment_analysis"].datasets]
     metrics = state["experiment_analysis"].metrics
     method_modules = state["method_analysis"].modules
@@ -42,10 +36,56 @@ def plan_reproduction_node(state: PaperAnalysisState) -> PaperAnalysisState:
         evidence_text=evidence_text,
     )
     high_blockers = [item for item in blocking_missing_items if item.severity == "high"]
-    if high_blockers and feasibility_level == "high":
-        feasibility_level = "medium"
-    elif len(high_blockers) >= 2:
-        feasibility_level = "low"
+
+    difficulty_score = {"low": 0, "medium": 1, "high": 2}
+
+    dependency_difficulty = "high" if not state["method_analysis"].implementation_dependencies else "medium"
+    if any("closed" in dependency.lower() or "proprietary" in dependency.lower() for dependency in state["method_analysis"].implementation_dependencies):
+        dependency_difficulty = "high"
+    elif len(state["method_analysis"].implementation_dependencies) >= 3:
+        dependency_difficulty = "low"
+
+    data_difficulty = "high" if not datasets else "medium"
+    if len(datasets) >= 2:
+        data_difficulty = "low"
+
+    compute_difficulty = "high" if {"reinforcement_learning", "agent_or_tool_use"} & paper_types else "medium"
+    if {"supervised_learning", "rag_or_retrieval", "system_or_framework"} & paper_types and compute_difficulty != "high":
+        compute_difficulty = "low"
+
+    implementation_difficulty = "high" if state["method_analysis"].formula_or_pseudocode_gaps or len(state["method_analysis"].missing_items) >= 2 else "medium"
+    if len(method_modules) <= 2 and not state["method_analysis"].formula_or_pseudocode_gaps:
+        implementation_difficulty = "low"
+
+    full_score = max(
+        difficulty_score[dependency_difficulty],
+        difficulty_score[data_difficulty],
+        difficulty_score[compute_difficulty],
+        difficulty_score[implementation_difficulty],
+        2 if {"reinforcement_learning", "agent_or_tool_use"} & paper_types else 1,
+    )
+    if high_blockers:
+        full_score = max(full_score, 1)
+    full_difficulty = "low" if full_score == 0 else "medium" if full_score == 1 else "high"
+
+    mvp_score = max(
+        0 if {"supervised_learning", "rag_or_retrieval", "system_or_framework"} & paper_types else 1,
+        difficulty_score[data_difficulty],
+        difficulty_score[implementation_difficulty],
+    )
+    if len(high_blockers) >= 2:
+        mvp_score = 2
+    mvp_feasibility = "high" if mvp_score == 0 else "medium" if mvp_score == 1 else "low"
+
+    dominant_dimension = max(
+        [
+            ("依赖可得性", dependency_difficulty),
+            ("数据可得性", data_difficulty),
+            ("算力成本", compute_difficulty),
+            ("实现复杂度", implementation_difficulty),
+        ],
+        key=lambda item: difficulty_score[item[1]],
+    )
     missing_info = [
         item
         for item in [
@@ -78,12 +118,14 @@ def plan_reproduction_node(state: PaperAnalysisState) -> PaperAnalysisState:
         )
     ]
     for module in method_modules[:4]:
+        module_inputs = module.known_inputs + module.inferred_inputs + module.missing_inputs
+        module_outputs = module.known_outputs + module.inferred_outputs + module.missing_outputs
         required_modules.append(
             ReproductionModule(
-                name=module.name,
+                name=module.module_name,
                 purpose=module.responsibility,
-                inputs=module.inputs,
-                outputs=module.outputs,
+                inputs=module_inputs,
+                outputs=module_outputs,
                 todos=module.implementation_notes or ["根据方法章节补齐实现细节"],
             )
         )
@@ -99,20 +141,23 @@ def plan_reproduction_node(state: PaperAnalysisState) -> PaperAnalysisState:
 
     fallback = ReproductionPlan(
         audit_summary=(
-            f"当前复现审计结论为 {feasibility_level}。"
+            f"当前复现审计结论为 {full_difficulty}，最主要阻塞集中在 {dominant_dimension[0]}。"
             f"{'存在高优先级阻塞：' + '；'.join(item.item for item in high_blockers[:3]) if high_blockers else '未发现不可绕过的高优先级阻塞，但仍需补齐缺失实现细节。'}"
         ),
-        confidence="low" if high_blockers else "medium",
+        report_confidence=cast(Literal["low", "medium", "high"], "low" if high_blockers else "medium"),
         recommended_first_experiment=recommended_first_experiment,
         feasibility_summary=(
-            f"该论文被归类为 {classification.domain}/{classification.paper_type}，建议复现方式为 "
-            f"{classification.reproduction_mode}。第一版应优先复现可验收的最小主实验闭环，而不是完整重跑全部实验。"
+            f"该论文被归类为 {', '.join(classification.paper_types) if classification.paper_types else 'unknown'}，建议第一版采用 pipeline_reproduction。"
+            f"四维拆解为：依赖可得性 {dependency_difficulty}，数据可得性 {data_difficulty}，"
+            f"算力成本 {compute_difficulty}，实现复杂度 {implementation_difficulty}。"
         ),
-        feasibility_level=cast(Literal["high", "medium", "low"], feasibility_level),
-        minimum_reproduction_goal=(
-            f"围绕 {', '.join(datasets[:3]) if datasets else '论文中的一个可获得数据集或 toy subset'}，"
-            f"实现数据加载、核心方法、{', '.join(metrics[:3]) if metrics else '主要评价指标'} 计算和一份结果报告。"
-        ),
+        full_reproduction_difficulty=cast(Literal["low", "medium", "high"], full_difficulty),
+        mvp_pipeline_feasibility=cast(Literal["low", "medium", "high"], mvp_feasibility),
+        dependency_availability_difficulty=cast(Literal["low", "medium", "high"], dependency_difficulty),
+        data_availability_difficulty=cast(Literal["low", "medium", "high"], data_difficulty),
+        compute_cost_difficulty=cast(Literal["low", "medium", "high"], compute_difficulty),
+        implementation_complexity_difficulty=cast(Literal["low", "medium", "high"], implementation_difficulty),
+        minimum_reproduction_goal="pipeline_reproduction",
         reproduction_scope=[
             "只选择一个主实验或最能代表论文方法的任务。",
             "优先跑通小数据集/小模型闭环，再考虑扩展到完整设置。",

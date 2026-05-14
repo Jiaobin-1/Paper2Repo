@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from app.core.database import create_paper, init_db, replace_chunks, save_embeddings
 from app.schemas.chunks import ChunkMetadata, PaperChunk
 from app.services import retrieval
-from app.services.retrieval import retrieve_context
+from app.services.retrieval import new_embedding_cache, retrieve_context, search_knowledge_base
 
 
 def _make_chunk(index: int, content: str, page: int = 1, section: str | None = None) -> PaperChunk:
@@ -67,3 +68,48 @@ class TestVectorRetrieval:
         ]
         results = retrieve_context(chunks, query="transformer", keywords=["transformer"])
         assert len(results) >= 1
+
+    def test_reuses_chunk_embeddings_with_cache(self, monkeypatch):
+        monkeypatch.setattr(retrieval, "_HAS_EMBEDDINGS", True)
+        calls = {"chunks": 0}
+
+        class FakeModel:
+            def encode(self, texts, show_progress_bar=False):
+                if len(texts) > 1:
+                    calls["chunks"] += 1
+                return retrieval.np.array([[1.0, 0.0] for _ in texts])
+
+        monkeypatch.setattr(retrieval, "_get_embedding_model", lambda: FakeModel())
+        chunks = [
+            _make_chunk(0, "Transformer method.", section="Method"),
+            _make_chunk(1, "Evaluation results.", section="Experiments"),
+        ]
+        cache = new_embedding_cache()
+        retrieve_context(chunks, query="method", keywords=["method"], embedding_cache=cache)
+        retrieve_context(chunks, query="results", keywords=["results"], embedding_cache=cache)
+        assert calls["chunks"] == 1
+
+    def test_knowledge_search_preserves_paper_id_for_same_chunk_index(self, isolated_settings, monkeypatch):
+        init_db()
+        monkeypatch.setattr(retrieval, "_HAS_EMBEDDINGS", True)
+
+        class FakeModel:
+            def encode(self, texts, show_progress_bar=False):
+                return retrieval.np.array([[1.0, 0.0] for _ in texts])
+
+        monkeypatch.setattr(retrieval, "_get_embedding_model", lambda: FakeModel())
+        pdf_a = isolated_settings / "a.pdf"
+        pdf_b = isolated_settings / "b.pdf"
+        pdf_a.write_bytes(b"%PDF-1.4\n%%EOF")
+        pdf_b.write_bytes(b"%PDF-1.4\n%%EOF")
+        paper_a = create_paper("a.pdf", pdf_a, pdf_a.stat().st_size, title="Paper A")
+        paper_b = create_paper("b.pdf", pdf_b, pdf_b.stat().st_size, title="Paper B")
+        replace_chunks(paper_a["id"], [_make_chunk(0, "Unrelated paper A.", section="Method").model_dump()])
+        replace_chunks(paper_b["id"], [_make_chunk(0, "Target paper B.", section="Method").model_dump()])
+        save_embeddings(paper_a["id"], [(0, retrieval.np.array([0.0, 1.0], dtype="float32").tobytes())])
+        save_embeddings(paper_b["id"], [(0, retrieval.np.array([1.0, 0.0], dtype="float32").tobytes())])
+
+        results = search_knowledge_base("target", top_k=1)
+
+        assert results[0].paper_id == paper_b["id"]
+        assert results[0].paper_title == "Paper B"

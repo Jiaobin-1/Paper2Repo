@@ -3,6 +3,7 @@ import type { Run } from "./types";
 import {
   WORKFLOW_STEPS,
   boundedProgress,
+  displayProgressPercent,
   formatProgressMessage,
   formatRunStatus,
   formatRunStatusWithProgress,
@@ -51,6 +52,17 @@ describe("boundedProgress", () => {
   it("handles null/undefined", () => {
     expect(boundedProgress(null)).toBe(0);
     expect(boundedProgress(undefined)).toBe(0);
+  });
+});
+
+describe("displayProgressPercent", () => {
+  it("forces completed runs to 100 percent", () => {
+    expect(displayProgressPercent(makeRun({ status: "completed", progress_percent: 0 }))).toBe(100);
+  });
+
+  it("clamps non-completed runs", () => {
+    expect(displayProgressPercent(makeRun({ status: "running", progress_percent: 120 }))).toBe(100);
+    expect(displayProgressPercent(makeRun({ status: "running", progress_percent: -5 }))).toBe(0);
   });
 });
 
@@ -126,6 +138,11 @@ describe("formatRunStatusWithProgress", () => {
   it("formats status with progress percentage", () => {
     const run = makeRun({ status: "running", progress_percent: 45 });
     expect(formatRunStatusWithProgress(run, "en")).toBe("Running · 45%");
+  });
+
+  it("shows 100 percent for completed runs even if stored progress is stale", () => {
+    const run = makeRun({ status: "completed", progress_percent: 0 });
+    expect(formatRunStatusWithProgress(run, "en")).toBe("Completed · 100%");
   });
 
   it("handles null run", () => {

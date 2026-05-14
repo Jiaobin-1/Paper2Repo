@@ -1,233 +1,200 @@
 # Paper2Repo
 
-[![CI](https://github.com/YOUR_USERNAME/Paper2Repo/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_USERNAME/Paper2Repo/actions/workflows/ci.yml)
+Paper2Repo is a local AI-paper analysis and reproduction-planning tool. It ingests paper PDFs or arXiv IDs, runs an 11-node LangGraph analysis workflow, and produces structured reports, Q&A, citations, knowledge search, comparison views, and exportable reproduction artifacts.
 
-Paper2Repo 是一个面向 AI 论文阅读与复现规划的本地工具。用户上传论文 PDF 后，系统会解析论文、运行 10 节点 LangGraph 分析流水线，生成结构化论文理解结果和 Markdown/PDF 复现规划报告，并支持基于论文内容的追问对话、代码骨架生成、论文知识库语义搜索等高级功能。
+The app works without an API key by using deterministic local fallback analysis. If `OPENAI_API_KEY` is configured, analysis and Q&A use an OpenAI-compatible chat API.
 
-## 核心功能
+## Features
 
-- **PDF 上传与解析**：拖拽上传，PyMuPDF 提取文本，自动检测章节结构
-- **arXiv 导入**：输入 arXiv ID 或 URL，自动下载 PDF 并启动分析
-- **10 节点分析流水线**：元信息提取 → 论文分类 → 方法拆解 → 实验分析 → 复现规划 → 报告生成
-- **结构化复现报告**：中英双语 Markdown/PDF 报告，含方法模块、实验矩阵、风险点、检查清单
-- **追问对话 (Q&A)**：报告生成后可就论文提问，支持 SSE 流式输出，超长对话自动摘要
-- **代码骨架生成**：基于复现计划自动生成项目骨架 zip，含目录结构、代码模板、README、PLAN.md
-- **论文知识库**：所有已分析论文自动建立向量索引，支持跨论文语义搜索
-- **多论文比较**：选择 2-4 篇已完成报告进行结构化对比
-- **Papers With Code**：基于分析结果推荐相关论文和代码资源链接
-- **向量检索**：sentence-transformers 嵌入检索，60% 语义 + 40% 关键词混合打分
-- **双语支持**：界面语言和报告语言独立配置（中文/英文）
-- **响应式设计**：移动端适配，报告全屏查看
-- **节点级容错**：分析节点失败不中断流程，失败节点写入报告附录
+- PDF upload, validation, parsing, section detection, and text chunking.
+- arXiv import, arXiv version lookup, and version-comparison workflow.
+- 11-node analysis pipeline: parse, chunk, citation extraction, metadata extraction, paper classification, understanding, method analysis, experiment analysis, reproduction planning, report generation, persistence.
+- Structured Markdown report with evidence references, missing-item audit, method modules, experiment matrix, risks, acceptance criteria, and code skeleton plan.
+- Report downloads as Markdown, PDF, HTML, and LaTeX.
+- Q&A over completed reports, including SSE streaming.
+- Code skeleton zip generation from the reproduction plan.
+- Knowledge-base search over analyzed paper chunks with hybrid semantic/keyword retrieval.
+- Batch upload and batch analysis status.
+- Multi-paper comparison and citation-network view.
+- Bilingual UI/report settings and responsive frontend.
+- Recoverable background jobs with node-level fault tolerance for non-critical analysis nodes.
 
 ## Tech Stack
 
-| 层级 | 技术 |
-|------|------|
-| Backend | FastAPI + Pydantic v2 |
-| Agent | LangGraph (10-node StateGraph) |
-| Database | SQLite (WAL mode) |
-| PDF | PyMuPDF |
-| LLM | OpenAI-compatible API (可选) |
-| Embeddings | sentence-transformers (all-MiniLM-L6-v2) |
-| Frontend | Next.js 16 + React 19 + TypeScript |
-| Testing | pytest (162) + vitest (26) + Playwright (20) |
-| Linting | ruff + mypy + tsc |
+| Layer | Tech |
+| --- | --- |
+| Backend | FastAPI, Pydantic v2 |
+| Agent workflow | LangGraph `StateGraph` |
+| Database | SQLite with WAL mode |
+| PDF parsing | PyMuPDF |
+| LLM | OpenAI-compatible chat API, optional |
+| Embeddings | sentence-transformers `all-MiniLM-L6-v2` |
+| Frontend | Next.js 16, React 19, TypeScript |
+| Testing | pytest 171 tests, vitest 31 tests, Playwright 20 tests |
+| Quality | ruff, mypy, TypeScript |
 
 ## Quick Start
 
-### 1. 环境配置
+### Prerequisites
+
+- Python 3.12
+- Node.js 22
+- Optional: `OPENAI_API_KEY` for LLM-backed analysis
+
+### Backend
 
 ```bash
 cp .env.example .env
-# 编辑 .env，填写 OPENAI_API_KEY（可选，不填则使用本地 fallback）
-```
-
-### 2. 启动后端
-
-```bash
 cd backend
 pip install -r requirements.txt
+pip install -r requirements-dev.txt
 python -m uvicorn app.main:app --reload
-# Health check: curl http://127.0.0.1:8000/health
 ```
 
-### 3. 启动前端
+Health check:
+
+```bash
+curl http://127.0.0.1:8000/health
+```
+
+### Frontend
 
 ```bash
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
-### 4. 使用
+Open `http://localhost:3000`.
 
-打开 `http://localhost:3000`，按页面流程操作：
+### Fallback Mode
 
-```
-上传 PDF / arXiv 导入 → 选择模型 → 启动分析 → 查看进度 → 查看报告
-→ 追问对话 / 下载代码骨架 / 搜索知识库 / 比较多篇论文
-```
+Leaving `OPENAI_API_KEY` empty is supported. The backend will still parse PDFs, run local keyword/evidence fallbacks, generate reports, and pass the integration tests.
 
-## 环境变量
+## Configuration
 
-| 变量 | 说明 | 默认值 |
-|------|------|--------|
-| `OPENAI_API_KEY` | LLM API Key（可选） | 空（使用 fallback） |
-| `OPENAI_BASE_URL` | API 地址 | `https://api.openai.com/v1` |
-| `OPENAI_MODEL` | 默认模型 | `gpt-4o-mini` |
-| `OPENAI_MODEL_OPTIONS` | 前端可选模型列表 | `gpt-4o-mini,gpt-4o` |
-| `DATABASE_URL` | SQLite 路径 | `sqlite:///./data/paper2repo.db` |
-| `UPLOAD_DIR` | 上传目录 | `./storage/uploads` |
-| `REPORT_DIR` | 报告目录 | `./storage/reports` |
-| `UPLOAD_MAX_MB` | 上传大小限制 | `50` |
-| `RUN_STALE_AFTER_MINUTES` | 任务超时（分钟） | `60` |
+| Variable | Description | Default |
+| --- | --- | --- |
+| `OPENAI_API_KEY` | Optional OpenAI-compatible API key | empty |
+| `OPENAI_BASE_URL` | Chat API base URL | `https://api.openai.com/v1` |
+| `OPENAI_MODEL` | Default model for new runs | `gpt-4o-mini` |
+| `OPENAI_MODEL_OPTIONS` | Comma-separated model options | `gpt-4o-mini,gpt-4o,deepseek-chat` |
+| `OPENAI_TIMEOUT_SECONDS` | LLM request timeout | `60` |
+| `DATABASE_URL` | SQLite database URL | `sqlite:///./data/paper2repo.db` |
+| `UPLOAD_DIR` | Uploaded PDF directory | `./storage/uploads` |
+| `REPORT_DIR` | Generated report directory | `./storage/reports` |
+| `UPLOAD_MAX_MB` | Single upload size limit | `50` |
+| `RUN_STALE_AFTER_MINUTES` | Stale job recovery threshold | `60` |
+| `ANALYSIS_MAX_WORKERS` | Batch/recovery worker count | `3` |
+| `ANALYSIS_JOB_LEASE_SECONDS` | Job lease duration | `3600` |
+| `ANALYSIS_JOB_MAX_ATTEMPTS` | Retry attempts for recoverable jobs | `2` |
 
-## API
+## Main API
 
-完整 API 文档启动后访问 `http://127.0.0.1:8000/docs`（Swagger UI）。
+Swagger UI is available at `http://127.0.0.1:8000/docs`.
 
-主要端点：
+| Method | Path | Description |
+| --- | --- | --- |
+| `POST` | `/api/papers/upload` | Upload one PDF |
+| `POST` | `/api/papers/upload-batch` | Upload multiple PDFs |
+| `POST` | `/api/papers/batch-start` | Start batch analysis |
+| `GET` | `/api/papers` | List uploaded papers |
+| `GET` | `/api/papers/{paper_id}` | Get paper details |
+| `GET` | `/api/papers/{paper_id}/runs` | List runs for one paper |
+| `POST` | `/api/papers/{paper_id}/runs` | Start analysis |
+| `GET` | `/api/runs` | List runs |
+| `GET` | `/api/runs/batches/{batch_id}` | Get batch status |
+| `GET` | `/api/runs/{run_id}` | Get run status |
+| `DELETE` | `/api/runs/{run_id}` | Delete completed/failed run |
+| `POST` | `/api/runs/{run_id}/cancel` | Cancel pending/running run |
+| `GET` | `/api/runs/{run_id}/analysis` | Get structured analysis JSON |
+| `GET` | `/api/runs/{run_id}/report` | Get Markdown report content |
+| `GET` | `/api/runs/{run_id}/report.md` | Download Markdown |
+| `GET` | `/api/runs/{run_id}/report.pdf` | Download PDF |
+| `GET` | `/api/runs/{run_id}/report.html` | Download HTML |
+| `GET` | `/api/runs/{run_id}/report.tex` | Download LaTeX |
+| `GET` | `/api/runs/{run_id}/skeleton` | Download code skeleton zip |
+| `GET` | `/api/runs/{run_id}/qa` | Get Q&A history |
+| `POST` | `/api/runs/{run_id}/qa` | Ask a question |
+| `POST` | `/api/runs/{run_id}/qa/stream` | Ask with SSE streaming |
+| `GET` | `/api/runs/{run_id}/pwc-links` | Papers With Code links |
+| `GET` | `/api/runs/{run_id}/citations` | Extracted citations |
+| `GET` | `/api/citations/network` | Citation edges across papers |
+| `POST` | `/api/arxiv/import` | Import and analyze arXiv paper |
+| `GET` | `/api/arxiv/{id}/versions` | List arXiv versions |
+| `POST` | `/api/arxiv/compare` | Compare two arXiv versions |
+| `GET` | `/api/compare` | Compare completed runs |
+| `GET` | `/api/compare/available` | List comparable runs |
+| `GET` | `/api/knowledge/search` | Search knowledge base |
+| `GET` | `/api/knowledge/papers` | List indexed papers |
+| `GET/PUT` | `/api/settings` | App settings |
+| `GET/PUT` | `/api/llm/config` | LLM config |
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| `POST` | `/api/papers/upload` | 上传 PDF |
-| `POST` | `/api/papers/{paper_id}/runs` | 启动分析 |
-| `GET` | `/api/runs/{run_id}` | 查询任务状态 |
-| `GET` | `/api/runs/{run_id}/report` | 获取报告 |
-| `GET` | `/api/runs/{run_id}/report.md` | 下载 Markdown |
-| `GET` | `/api/runs/{run_id}/report.pdf` | 下载 PDF |
-| `GET` | `/api/runs/{run_id}/skeleton` | 下载代码骨架 zip |
-| `POST` | `/api/runs/{run_id}/qa` | 追问对话 |
-| `POST` | `/api/runs/{run_id}/qa/stream` | 追问对话 (SSE 流式) |
-| `GET` | `/api/runs/{run_id}/qa` | 对话历史 |
-| `GET` | `/api/runs/{run_id}/pwc-links` | Papers With Code 推荐 |
-| `POST` | `/api/arxiv/import` | arXiv 论文导入 |
-| `GET` | `/api/arxiv/{id}/versions` | arXiv 版本列表 |
-| `GET` | `/api/compare` | 多论文比较 |
-| `GET` | `/api/compare/available` | 可比较任务列表 |
-| `GET` | `/api/knowledge/search` | 知识库语义搜索 |
-| `GET` | `/api/knowledge/papers` | 知识库已索引论文 |
-| `GET/PUT` | `/api/settings` | 系统设置 |
+## Frontend Routes
 
-## 分析流水线
+| Route | Description |
+| --- | --- |
+| `/` | Upload, recent runs, workflow overview |
+| `/batch` | Batch PDF upload and batch analysis |
+| `/arxiv` | arXiv import/version workflows |
+| `/knowledge` | Knowledge-base semantic search |
+| `/compare` | Multi-paper comparison |
+| `/settings` | UI/report language, model, and theme settings |
+| `/runs/[runId]` | Report, Q&A, downloads, citations |
+| `/papers/[paperId]` | Paper details and run history |
 
-```
-parse_pdf → chunk_paper → extract_metadata → classify_paper_type
-→ understand_paper → analyze_method → analyze_experiments
-→ plan_reproduction → generate_report → persist_result
-```
+## Development Checks
 
-- **关键节点**（parse_pdf, chunk_paper）：失败时中断流程
-- **分析节点**（understand ~ plan）：失败时跳过，后续继续
-- **报告生成**：即使部分失败，仍生成部分报告 + 错误附录
-- **向量索引**：`persist_result` 完成后自动将 chunk 嵌入写入 `paper_embeddings` 表
-
-## 页面路由
-
-| 路径 | 说明 |
-|------|------|
-| `/` | 首页：上传、运行历史、工作流 |
-| `/arxiv` | arXiv 论文导入 |
-| `/knowledge` | 论文知识库语义搜索 |
-| `/compare` | 多论文比较 |
-| `/settings` | 设置（语言、模型） |
-| `/runs/[runId]` | 报告详情 + Q&A + 代码骨架下载 |
-| `/papers/[paperId]` | 论文详情 + 运行列表 |
-
-## 开发
-
-### 后端测试
+Backend:
 
 ```bash
 cd backend
-pip install -r requirements-dev.txt
-
-# 全部测试 (162 tests)
-python -m pytest tests/ -v
-
-# Lint
-python -m ruff check app/ tests/
-
-# Type check
-python -m mypy app/ --ignore-missing-imports
+python -m ruff check app tests
+python -m mypy app --ignore-missing-imports
+python -m pytest tests -q
 ```
 
-### 前端测试
+Frontend:
 
 ```bash
 cd frontend
-
-# Type check
 npm run lint
-
-# 单元测试 (26 tests, vitest)
 npm run test:unit
-
-# E2E 测试 (20 tests, Playwright)
-npx playwright install chromium
-npx playwright test
+npm run build
+npm run test:e2e
 ```
 
-### CI
+Playwright tests are fully mocked for CI stability. Backend integration coverage is handled by pytest.
 
-推送到 `main` 分支或创建 PR 时，GitHub Actions 自动运行：
-- 后端：ruff + mypy + pytest
-- 前端：tsc + vitest + playwright
+## GitHub Checklist
 
-## 项目结构
+- Do not commit `.env`, local SQLite databases, uploaded PDFs, generated reports, `.DS_Store`, `.next`, cache folders, Playwright reports, or local `.docx` project reports.
+- Use `.env.example` as the public configuration template.
+- Keep `backend/tests/fixtures/sample.pdf`; it is a small test fixture used by integration tests.
+- Run all backend and frontend checks before opening a pull request.
 
-```
+## Repository Layout
+
+```text
 Paper2Repo/
 ├── backend/
 │   ├── app/
-│   │   ├── agents/          # LangGraph 流水线
-│   │   │   ├── nodes/       # 10 个分析节点
-│   │   │   ├── graph.py     # 流水线编排
-│   │   │   ├── state.py     # TypedDict 状态
-│   │   │   └── prompts.py   # LLM 提示词
-│   │   ├── api/             # FastAPI 路由
-│   │   │   ├── routes_papers.py    # 论文上传
-│   │   │   ├── routes_runs.py      # 运行管理 + 报告 + 代码骨架
-│   │   │   ├── routes_qa.py        # Q&A 对话 (流式)
-│   │   │   ├── routes_arxiv.py     # arXiv 导入
-│   │   │   ├── routes_compare.py   # 多论文比较
-│   │   │   ├── routes_knowledge.py # 知识库搜索
-│   │   │   ├── routes_pwc.py       # Papers With Code
-│   │   │   ├── routes_llm.py       # LLM 配置
-│   │   │   └── routes_settings.py  # 系统设置
-│   │   ├── core/            # 配置、数据库
-│   │   ├── schemas/         # Pydantic 模型
-│   │   └── services/        # 业务逻辑
-│   │       ├── code_skeleton.py    # 代码骨架生成
-│   │       ├── arxiv_client.py     # arXiv API 客户端
-│   │       ├── qa_service.py       # Q&A 服务 (含对话摘要)
-│   │       ├── retrieval.py        # 检索 + 向量索引
-│   │       └── ...
-│   ├── tests/               # 162 个测试
-│   └── requirements.txt
+│   │   ├── agents/
+│   │   ├── api/
+│   │   ├── core/
+│   │   ├── schemas/
+│   │   └── services/
+│   └── tests/
 ├── frontend/
 │   ├── app/
-│   │   ├── components/
-│   │   │   ├── upload/      # PDF 上传组件
-│   │   │   ├── report/      # 报告、Q&A、代码骨架、PwC
-│   │   │   ├── history/     # 运行历史
-│   │   │   ├── knowledge/   # 知识库搜索
-│   │   │   └── shared/      # 共享组件
-│   │   ├── arxiv/           # arXiv 导入页
-│   │   ├── knowledge/       # 知识库页
-│   │   ├── compare/         # 多论文比较页
-│   │   ├── papers/          # 论文详情页
-│   │   ├── runs/            # 报告详情页
-│   │   └── settings/        # 设置页
-│   ├── lib/                 # 工具函数、API 客户端
-│   ├── e2e/                 # Playwright E2E 测试
-│   └── package.json
-├── .github/workflows/ci.yml # CI 配置
-├── CLAUDE.md                # Claude Code 指南
+│   ├── e2e/
+│   └── lib/
+├── docs/
+├── .github/workflows/ci.yml
+├── docker-compose.yml
 └── README.md
 ```
 
-## 许可证
+## License
 
 MIT

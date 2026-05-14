@@ -23,12 +23,16 @@ class Settings(BaseSettings):
     openai_base_url: str = "https://api.openai.com/v1"
     openai_model: str = "gpt-4o-mini"
     openai_model_options: str = ""
+    openai_timeout_seconds: float = 60.0
 
     database_url: str = "sqlite:///./data/paper2repo.db"
     upload_dir: str = "./storage/uploads"
     report_dir: str = "./storage/reports"
     upload_max_mb: int = 50
     run_stale_after_minutes: int = 60
+    analysis_max_workers: int = 3
+    analysis_job_lease_seconds: int = 3600
+    analysis_job_max_attempts: int = 2
 
     model_config = SettingsConfigDict(
         env_file=BACKEND_ROOT.parent / ".env",

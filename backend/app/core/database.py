@@ -12,7 +12,9 @@ from app.core.config import get_settings
 DEFAULT_MODEL_SETTING_KEY = "default_model"
 UI_LANGUAGE_SETTING_KEY = "ui_language"
 REPORT_LANGUAGE_SETTING_KEY = "report_language"
+THEME_SETTING_KEY = "theme"
 SUPPORTED_LANGUAGES = {"zh", "en"}
+SUPPORTED_THEMES = {"light", "dark", "system"}
 STALE_RUN_ERROR_MESSAGE = "任务中断或超时，请重新启动分析。"
 
 
@@ -131,12 +133,45 @@ def init_db() -> None:
                 embedding BLOB NOT NULL,
                 FOREIGN KEY (paper_id) REFERENCES papers(id)
             );
+
+            CREATE TABLE IF NOT EXISTS citations (
+                id TEXT PRIMARY KEY,
+                run_id TEXT NOT NULL,
+                paper_id TEXT NOT NULL,
+                citation_index INTEGER NOT NULL,
+                authors TEXT NOT NULL,
+                title TEXT NOT NULL,
+                venue TEXT NOT NULL DEFAULT '',
+                year TEXT NOT NULL DEFAULT '',
+                doi TEXT NOT NULL DEFAULT '',
+                raw_text TEXT NOT NULL,
+                FOREIGN KEY (run_id) REFERENCES analysis_runs(id),
+                FOREIGN KEY (paper_id) REFERENCES papers(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS analysis_jobs (
+                id TEXT PRIMARY KEY,
+                run_id TEXT NOT NULL UNIQUE,
+                paper_id TEXT NOT NULL,
+                status TEXT NOT NULL,
+                attempts INTEGER NOT NULL DEFAULT 0,
+                max_attempts INTEGER NOT NULL DEFAULT 2,
+                lease_until TEXT,
+                cancel_requested INTEGER NOT NULL DEFAULT 0,
+                error_message TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (run_id) REFERENCES analysis_runs(id),
+                FOREIGN KEY (paper_id) REFERENCES papers(id)
+            );
             """
         )
         _ensure_analysis_run_columns(conn)
+        _ensure_batch_column(conn)
         _ensure_default_model_setting(conn)
         _ensure_language_settings(conn)
         _ensure_paper_columns(conn)
+        _repair_completed_runs(conn)
         recover_stale_runs(conn)
 
 
@@ -157,6 +192,27 @@ def _ensure_analysis_run_columns(conn: sqlite3.Connection) -> None:
         WHERE updated_at IS NULL OR updated_at = ''
         """,
         (utc_now(),),
+    )
+
+
+def _repair_completed_runs(conn: sqlite3.Connection) -> None:
+    now = utc_now()
+    conn.execute(
+        """
+        UPDATE analysis_runs
+        SET current_step = 'completed',
+            progress_percent = 100,
+            completed_at = COALESCE(completed_at, updated_at, started_at, created_at, ?),
+            updated_at = COALESCE(NULLIF(updated_at, ''), completed_at, started_at, created_at, ?)
+        WHERE status = 'completed'
+          AND (
+              current_step IS NULL
+              OR current_step != 'completed'
+              OR progress_percent != 100
+              OR completed_at IS NULL
+          )
+        """,
+        (now, now),
     )
 
 
@@ -215,6 +271,7 @@ def _ensure_default_model_setting(conn: sqlite3.Connection) -> None:
 def _ensure_language_settings(conn: sqlite3.Connection) -> None:
     _ensure_setting(conn, UI_LANGUAGE_SETTING_KEY, "zh", SUPPORTED_LANGUAGES)
     _ensure_setting(conn, REPORT_LANGUAGE_SETTING_KEY, "en", SUPPORTED_LANGUAGES)
+    _ensure_setting(conn, THEME_SETTING_KEY, "light", SUPPORTED_THEMES)
 
 
 def _ensure_paper_columns(conn: sqlite3.Connection) -> None:
@@ -313,6 +370,22 @@ def _set_language_setting(key: str, language: str) -> str:
     return normalized_language
 
 
+def get_theme() -> str:
+    stored_theme = get_app_setting(THEME_SETTING_KEY)
+    if stored_theme in SUPPORTED_THEMES:
+        return stored_theme
+    set_app_setting(THEME_SETTING_KEY, "light")
+    return "light"
+
+
+def set_theme(theme: str) -> str:
+    normalized_theme = theme.strip().lower()
+    if normalized_theme not in SUPPORTED_THEMES:
+        raise ValueError("Theme must be light, dark, or system.")
+    set_app_setting(THEME_SETTING_KEY, normalized_theme)
+    return normalized_theme
+
+
 def create_paper(
     filename: str,
     file_path: Path,
@@ -352,7 +425,7 @@ def update_paper_title(paper_id: str, title: str) -> None:
         conn.execute("UPDATE papers SET title = ? WHERE id = ?", (title, paper_id))
 
 
-def create_run(paper_id: str, model_name: str | None = None) -> dict[str, Any]:
+def create_run(paper_id: str, model_name: str | None = None, batch_id: str | None = None) -> dict[str, Any]:
     run_id = str(uuid.uuid4())
     now = utc_now()
     selected_model = model_name or get_default_model()
@@ -361,15 +434,163 @@ def create_run(paper_id: str, model_name: str | None = None) -> dict[str, Any]:
             """
             INSERT INTO analysis_runs (
                 id, paper_id, status, model_name, current_step, progress_percent,
-                started_at, created_at, updated_at
+                started_at, created_at, updated_at, batch_id
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (run_id, paper_id, "pending", selected_model, "queued", 0, now, now, now),
+            (run_id, paper_id, "pending", selected_model, "queued", 0, now, now, now, batch_id),
         )
     result = get_run(run_id)
     assert result is not None
     return result
+
+
+def create_analysis_job(run_id: str, paper_id: str, max_attempts: int | None = None) -> dict[str, Any]:
+    settings = get_settings()
+    now = utc_now()
+    attempts_limit = max(1, max_attempts or settings.analysis_job_max_attempts)
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO analysis_jobs (
+                id, run_id, paper_id, status, attempts, max_attempts,
+                lease_until, cancel_requested, error_message, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(run_id) DO UPDATE SET
+                status = CASE
+                    WHEN analysis_jobs.status IN ('completed', 'canceled') THEN analysis_jobs.status
+                    ELSE excluded.status
+                END,
+                max_attempts = excluded.max_attempts,
+                updated_at = excluded.updated_at
+            """,
+            (str(uuid.uuid4()), run_id, paper_id, "pending", 0, attempts_limit, None, 0, None, now, now),
+        )
+    job = get_analysis_job(run_id)
+    assert job is not None
+    return job
+
+
+def get_analysis_job(run_id: str) -> dict[str, Any] | None:
+    with get_connection() as conn:
+        row = conn.execute("SELECT * FROM analysis_jobs WHERE run_id = ?", (run_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def claim_analysis_job(run_id: str) -> str:
+    """Return claimed, missing, completed, or canceled."""
+    settings = get_settings()
+    lease_until = (datetime.now(UTC) + timedelta(seconds=max(60, settings.analysis_job_lease_seconds))).isoformat()
+    now = utc_now()
+    with get_connection() as conn:
+        row = conn.execute("SELECT * FROM analysis_jobs WHERE run_id = ?", (run_id,)).fetchone()
+        if not row:
+            return "missing"
+        if row["status"] == "completed":
+            return "completed"
+        if row["cancel_requested"]:
+            conn.execute(
+                """
+                UPDATE analysis_jobs
+                SET status = ?, updated_at = ?
+                WHERE run_id = ?
+                """,
+                ("canceled", now, run_id),
+            )
+            return "canceled"
+        conn.execute(
+            """
+            UPDATE analysis_jobs
+            SET status = ?, attempts = attempts + 1, lease_until = ?, error_message = NULL, updated_at = ?
+            WHERE run_id = ?
+            """,
+            ("running", lease_until, now, run_id),
+        )
+    return "claimed"
+
+
+def complete_analysis_job(run_id: str) -> None:
+    now = utc_now()
+    with get_connection() as conn:
+        conn.execute(
+            """
+            UPDATE analysis_jobs
+            SET status = ?, lease_until = NULL, error_message = NULL, updated_at = ?
+            WHERE run_id = ?
+            """,
+            ("completed", now, run_id),
+        )
+
+
+def fail_analysis_job(run_id: str, error_message: str) -> str:
+    now = utc_now()
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT attempts, max_attempts, cancel_requested FROM analysis_jobs WHERE run_id = ?",
+            (run_id,),
+        ).fetchone()
+        if not row:
+            return "missing"
+        if row["cancel_requested"]:
+            status = "canceled"
+        elif row["attempts"] < row["max_attempts"]:
+            status = "pending"
+        else:
+            status = "failed"
+        conn.execute(
+            """
+            UPDATE analysis_jobs
+            SET status = ?, lease_until = NULL, error_message = ?, updated_at = ?
+            WHERE run_id = ?
+            """,
+            (status, error_message, now, run_id),
+        )
+    return status
+
+
+def request_analysis_cancel(run_id: str) -> bool:
+    now = utc_now()
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """
+            UPDATE analysis_jobs
+            SET cancel_requested = 1, updated_at = ?
+            WHERE run_id = ? AND status IN ('pending', 'running')
+            """,
+            (now, run_id),
+        )
+    return cursor.rowcount > 0
+
+
+def is_analysis_cancel_requested(run_id: str) -> bool:
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT cancel_requested FROM analysis_jobs WHERE run_id = ?",
+            (run_id,),
+        ).fetchone()
+    return bool(row and row["cancel_requested"])
+
+
+def list_recoverable_analysis_jobs(limit: int = 20) -> list[dict[str, Any]]:
+    bounded_limit = max(1, min(limit, 100))
+    now = utc_now()
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT j.*, r.status AS run_status
+            FROM analysis_jobs j
+            JOIN analysis_runs r ON r.id = j.run_id
+            WHERE j.cancel_requested = 0
+              AND j.status IN ('pending', 'running')
+              AND r.status IN ('pending', 'running')
+              AND (j.status = 'pending' OR j.lease_until IS NULL OR j.lease_until < ?)
+            ORDER BY j.created_at ASC
+            LIMIT ?
+            """,
+            (now, bounded_limit),
+        ).fetchall()
+    return [dict(row) for row in rows]
 
 
 def update_run_status(
@@ -403,7 +624,7 @@ def update_run_status(
 def get_run(run_id: str) -> dict[str, Any] | None:
     with get_connection() as conn:
         row = conn.execute("SELECT * FROM analysis_runs WHERE id = ?", (run_id,)).fetchone()
-    return dict(row) if row else None
+    return _normalize_run_record(dict(row)) if row else None
 
 
 def list_runs(paper_id: str | None = None, limit: int = 20) -> list[dict[str, Any]]:
@@ -424,7 +645,7 @@ def list_runs(paper_id: str | None = None, limit: int = 20) -> list[dict[str, An
     params.append(bounded_limit)
     with get_connection() as conn:
         rows = conn.execute(query, params).fetchall()
-    return [dict(row) for row in rows]
+    return [_normalize_run_record(dict(row)) for row in rows]
 
 
 def replace_chunks(paper_id: str, chunks: list[dict[str, Any]]) -> None:
@@ -533,6 +754,7 @@ def delete_run(run_id: str) -> dict[str, Any] | None:
     if not run:
         return None
     with get_connection() as conn:
+        conn.execute("DELETE FROM analysis_jobs WHERE run_id = ?", (run_id,))
         conn.execute("DELETE FROM qa_messages WHERE run_id = ?", (run_id,))
         conn.execute("DELETE FROM reports WHERE run_id = ?", (run_id,))
         conn.execute("DELETE FROM analysis_results WHERE run_id = ?", (run_id,))
@@ -600,3 +822,61 @@ def get_all_embeddings() -> list[dict[str, Any]]:
 def delete_embeddings(paper_id: str) -> None:
     with get_connection() as conn:
         conn.execute("DELETE FROM paper_embeddings WHERE paper_id = ?", (paper_id,))
+
+
+def create_citations(run_id: str, paper_id: str, citations: list[dict[str, Any]]) -> None:
+    with get_connection() as conn:
+        conn.executemany(
+            """
+            INSERT INTO citations (id, run_id, paper_id, citation_index, authors, title, venue, year, doi, raw_text)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (str(uuid.uuid4()), run_id, paper_id, c["index"], c["authors"], c["title"], c.get("venue", ""), c.get("year", ""), c.get("doi", ""), c["raw_text"])
+                for c in citations
+            ],
+        )
+
+
+def get_citations_for_run(run_id: str) -> list[dict[str, Any]]:
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT * FROM citations WHERE run_id = ? ORDER BY citation_index ASC",
+            (run_id,),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def _ensure_batch_column(conn: sqlite3.Connection) -> None:
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(analysis_runs)").fetchall()}
+    if "batch_id" not in columns:
+        conn.execute("ALTER TABLE analysis_runs ADD COLUMN batch_id TEXT")
+
+
+def create_batch_id() -> str:
+    return str(uuid.uuid4())
+
+
+def get_runs_by_batch(batch_id: str) -> list[dict[str, Any]]:
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT r.*, p.title AS paper_title, p.filename AS paper_filename
+            FROM analysis_runs r
+            JOIN papers p ON p.id = r.paper_id
+            WHERE r.batch_id = ?
+            ORDER BY r.created_at ASC
+            """,
+            (batch_id,),
+        ).fetchall()
+    return [_normalize_run_record(dict(row)) for row in rows]
+
+
+def _normalize_run_record(run: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(run)
+    if normalized.get("status") == "completed":
+        normalized["current_step"] = "completed"
+        normalized["progress_percent"] = 100
+        if not normalized.get("completed_at"):
+            normalized["completed_at"] = normalized.get("updated_at") or normalized.get("started_at") or normalized.get("created_at")
+    return normalized

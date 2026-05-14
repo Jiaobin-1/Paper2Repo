@@ -46,13 +46,18 @@ def _build_report(
 
     modules = "\n".join(
         "\n".join([
-            f"### {i}. {m.name}",
+            f"### {i}. {m.module_name}",
+            f"**Section:** {m.paper_section}",
             f"- {L.m_responsibility}：{_value(m.responsibility, L)}",
-            f"- {L.m_inputs}：{', '.join(m.inputs) if m.inputs else not_spec}",
-            f"- {L.m_outputs}：{', '.join(m.outputs) if m.outputs else not_spec}",
-            f"- {L.m_priority}：{_label(L.priority_labels, m.implementation_priority) if m.implementation_priority else not_spec}",
-            f"- {L.m_contract}：{m.interface_contract or not_spec}",
+            f"- Known Inputs：{', '.join(m.known_inputs) if m.known_inputs else not_spec}",
+            f"- Inferred Inputs：{', '.join(m.inferred_inputs) if m.inferred_inputs else not_spec}",
+            f"- Missing Inputs：{', '.join(m.missing_inputs) if m.missing_inputs else not_spec}",
+            f"- Known Outputs：{', '.join(m.known_outputs) if m.known_outputs else not_spec}",
+            f"- Inferred Outputs：{', '.join(m.inferred_outputs) if m.inferred_outputs else not_spec}",
+            f"- Missing Outputs：{', '.join(m.missing_outputs) if m.missing_outputs else not_spec}",
+            f"- Parameters：{'; '.join(m.key_parameters) if m.key_parameters else not_spec}",
             f"- {L.m_notes}：{'; '.join(m.implementation_notes) if m.implementation_notes else not_spec}",
+            f"- Evidence：{m.evidence_quote} (Confidence: {m.confidence})",
         ])
         for i, m in enumerate(method.modules, start=1)
     ) or L.no_modules
@@ -98,6 +103,14 @@ def _build_report(
     dependencies = _bullets(method.implementation_dependencies, L)
     checklist = _checkboxes([item.item for item in reproduction.experiment_checklist], L)
     acceptance = _checkboxes(reproduction.acceptance_criteria, L)
+    difficulty_breakdown = "\n".join(
+        [
+            f"- {L.h_dependency_difficulty}：{_label(L.level_labels, reproduction.dependency_availability_difficulty)}",
+            f"- {L.h_data_difficulty}：{_label(L.level_labels, reproduction.data_availability_difficulty)}",
+            f"- {L.h_compute_difficulty}：{_label(L.level_labels, reproduction.compute_cost_difficulty)}",
+            f"- {L.h_implementation_difficulty}：{_label(L.level_labels, reproduction.implementation_complexity_difficulty)}",
+        ]
+    )
 
     sep = "；" if L.lang_code == "zh" else "; "
 
@@ -107,11 +120,12 @@ def _build_report(
 
 {L.h_audit}
 
-- {L.h_repro_level}：{_label(L.level_labels, reproduction.feasibility_level)}
+- Full Reproduction Difficulty：{_label(L.level_labels, reproduction.full_reproduction_difficulty)}
+- MVP Pipeline Feasibility：{_label(L.level_labels, reproduction.mvp_pipeline_feasibility)}
+- Report Confidence：{_label(L.level_labels, reproduction.report_confidence)}
 - {L.h_audit_summary}：{_value(reproduction.audit_summary or reproduction.feasibility_summary, L)}
 - {L.h_first_step}：{_value(reproduction.recommended_first_experiment or reproduction.minimum_reproduction_goal, L)}
 - {L.h_biggest_blocker}：{sep.join(item.item for item in reproduction.blocking_missing_items[:3]) if reproduction.blocking_missing_items else L.no_blockers}
-- {L.h_confidence}：{_label(L.level_labels, reproduction.confidence)}
 
 {L.h_blocking_gaps}
 {_missing_table(reproduction.blocking_missing_items, L)}
@@ -123,11 +137,7 @@ def _build_report(
 
 - {L.h_title}：{metadata.title}
 - {L.h_authors}：{", ".join(metadata.authors) if metadata.authors else L.no_value}
-- {L.h_domain}：{classification.domain}
-- {L.h_paper_type}：{_label(L.paper_type_labels, classification.paper_type)}
-- {L.h_repro_mode}：{_label(L.reproduction_mode_labels, classification.reproduction_mode)}
-- {L.h_difficulty}：{_label(L.level_labels, classification.difficulty)}
-- {L.h_mvp_suitability}：{_label(L.level_labels, classification.suitability_for_mvp)}
+- Paper Types：{", ".join(classification.paper_types) if classification.paper_types else L.no_value}
 
 {L.h_class_reasons}
 {_bullets(classification.reasons, L)}
@@ -153,7 +163,7 @@ def _build_report(
 {_value(understanding.conclusion, L)}
 
 {L.h_limitations}
-{_bullets(understanding.limitations, L)}
+{_bullets([f'[{limitation.limitation_type}] {limitation.description} (Evidence: {limitation.evidence_quote}, Confidence: {limitation.confidence})' for limitation in understanding.limitations], L)}
 {L.h_scenarios}
 {_bullets(understanding.applicable_scenarios, L)}
 
@@ -214,8 +224,11 @@ def _build_report(
 {L.h_plan}
 
 {L.h_feasibility}
-- {L.h_feasibility_level}：{_label(L.level_labels, reproduction.feasibility_level)}
+- Full Reproduction Difficulty：{_label(L.level_labels, reproduction.full_reproduction_difficulty)}
+- MVP Pipeline Feasibility：{_label(L.level_labels, reproduction.mvp_pipeline_feasibility)}
 - {L.h_feasibility_summary}：{_value(reproduction.feasibility_summary, L)}
+{L.h_difficulty_breakdown}
+{difficulty_breakdown}
 
 {L.h_min_goal}
 {_value(reproduction.minimum_reproduction_goal, L)}

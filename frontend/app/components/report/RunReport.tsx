@@ -1,9 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { getReport, getReportMarkdownUrl, getReportPdfUrl, getSkeletonUrl } from "../../../lib/api";
+import { getReport, getReportHtmlUrl, getReportLatexUrl, getReportMarkdownUrl, getReportPdfUrl, getSkeletonUrl } from "../../../lib/api";
 import { formatProgressMessage, formatRunStatusWithProgress } from "../../../lib/runPresentation";
 import { pollRunUntilTerminal } from "../../../lib/runPolling";
 import { text } from "../../../lib/i18n";
@@ -12,6 +11,7 @@ import type { Report, Run } from "../../../lib/types";
 import { WorkflowProgress } from "./RunProgress";
 import QaPanel from "./QaPanel";
 import PwcLinks from "./PwcLinks";
+import CitationNetwork from "./CitationNetwork";
 import InfoBlock from "../shared/InfoBlock";
 
 export default function RunReport({ runId }: { runId: string }) {
@@ -82,9 +82,6 @@ export default function RunReport({ runId }: { runId: string }) {
           <h1>{report?.title || text(language, "detailsTitle")}</h1>
           <p className="muted">{text(language, "detailsSubtitle")}</p>
         </div>
-        <Link className="button secondary" href="/">
-          {text(language, "backHome")}
-        </Link>
       </section>
 
       <section className="panel stack">
@@ -126,6 +123,12 @@ export default function RunReport({ runId }: { runId: string }) {
               <a className="button secondary" href={getReportPdfUrl(runId)} download>
                 {text(language, "downloadPdf")}
               </a>
+              <a className="button secondary" href={getReportHtmlUrl(runId)} download>
+                {text(language, "downloadHtml")}
+              </a>
+              <a className="button secondary" href={getReportLatexUrl(runId)} download>
+                {text(language, "downloadLatex")}
+              </a>
               <a className="button secondary" href={getSkeletonUrl(runId)} download>
                 {text(language, "downloadSkeleton")}
               </a>
@@ -140,6 +143,8 @@ export default function RunReport({ runId }: { runId: string }) {
       {report ? <PwcLinks runId={runId} /> : null}
 
       {report ? <QaPanel runId={runId} /> : null}
+
+      {report ? <CitationNetwork runId={runId} /> : null}
     </main>
   );
 }

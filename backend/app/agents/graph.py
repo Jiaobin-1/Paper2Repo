@@ -7,6 +7,7 @@ from app.agents.nodes.analyze_experiments import analyze_experiments_node
 from app.agents.nodes.analyze_method import analyze_method_node
 from app.agents.nodes.chunk_paper import chunk_paper_node
 from app.agents.nodes.classify_paper_type import classify_paper_type_node
+from app.agents.nodes.extract_citations import extract_citations_node
 from app.agents.nodes.extract_metadata import extract_metadata_node
 from app.agents.nodes.generate_report import generate_report_node
 from app.agents.nodes.parse_pdf import parse_pdf_node
@@ -15,12 +16,14 @@ from app.agents.nodes.plan_reproduction import plan_reproduction_node
 from app.agents.nodes.understand_paper import understand_paper_node
 from app.agents.state import PaperAnalysisState
 from app.core.database import get_report_language
+from app.services.retrieval import new_embedding_cache
 
 logger = logging.getLogger(__name__)
 
 NODE_ORDER = [
     "parse_pdf_node",
     "chunk_paper_node",
+    "extract_citations_node",
     "extract_metadata_node",
     "classify_paper_type_node",
     "understand_paper_node",
@@ -64,6 +67,7 @@ def build_graph(progress_callback: ProgressCallback | None = None):
     node_fns = {
         "parse_pdf_node": parse_pdf_node,
         "chunk_paper_node": chunk_paper_node,
+        "extract_citations_node": extract_citations_node,
         "extract_metadata_node": extract_metadata_node,
         "classify_paper_type_node": classify_paper_type_node,
         "understand_paper_node": understand_paper_node,
@@ -106,6 +110,7 @@ def run_analysis(
         "pdf_path": pdf_path,
         "model_name": model_name or "",
         "report_language": get_report_language(),
+        "retrieval_cache": new_embedding_cache(),
         "status": "pending",
         "error_message": None,
         "node_errors": [],

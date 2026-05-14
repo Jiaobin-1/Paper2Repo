@@ -1,11 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getAppSettings, updateAppSettings } from "../../lib/api";
 import { text } from "../../lib/i18n";
 import { SETTINGS_UPDATED_EVENT, useAppLanguage } from "../../lib/useAppLanguage";
-import type { AppSettings, LanguageCode } from "../../lib/types";
+import type { AppSettings, LanguageCode, ThemeMode } from "../../lib/types";
 
 export default function SettingsPage() {
   const language = useAppLanguage();
@@ -13,6 +12,7 @@ export default function SettingsPage() {
   const [defaultModel, setDefaultModel] = useState("");
   const [uiLanguage, setUiLanguage] = useState<LanguageCode>("zh");
   const [reportLanguage, setReportLanguage] = useState<LanguageCode>("en");
+  const [theme, setTheme] = useState<ThemeMode>("light");
   const [message, setMessage] = useState(text(language, "settingsLoadFailed"));
   const [isSaving, setIsSaving] = useState(false);
 
@@ -25,6 +25,7 @@ export default function SettingsPage() {
         setDefaultModel(loadedSettings.default_model);
         setUiLanguage(loadedSettings.ui_language);
         setReportLanguage(loadedSettings.report_language);
+        setTheme(loadedSettings.theme);
         setMessage("");
       })
       .catch((error) => {
@@ -43,11 +44,13 @@ export default function SettingsPage() {
         default_model: defaultModel,
         ui_language: uiLanguage,
         report_language: reportLanguage,
+        theme,
       });
       setSettings(updated);
       setDefaultModel(updated.default_model);
       setUiLanguage(updated.ui_language);
       setReportLanguage(updated.report_language);
+      setTheme(updated.theme);
       setMessage(text(updated.ui_language, "settingsSaved"));
       window.dispatchEvent(new Event(SETTINGS_UPDATED_EVENT));
     } catch (error) {
@@ -64,9 +67,6 @@ export default function SettingsPage() {
           <h1>{text(language, "settingsPageTitle")}</h1>
           <p className="muted">{text(language, "settingsPageDesc")}</p>
         </div>
-        <Link className="button secondary" href="/">
-          {text(language, "backHome")}
-        </Link>
       </section>
 
       <section className="panel stack">
@@ -84,6 +84,15 @@ export default function SettingsPage() {
         <select id="report-language" className="select" value={reportLanguage} onChange={(event) => setReportLanguage(event.target.value as LanguageCode)}>
           <option value="en">{text(language, "english")}</option>
           <option value="zh">{text(language, "chinese")}</option>
+        </select>
+
+        <label className="field-label" htmlFor="theme-mode">
+          {text(language, "themeMode")}
+        </label>
+        <select id="theme-mode" className="select" value={theme} onChange={(event) => setTheme(event.target.value as ThemeMode)}>
+          <option value="light">{text(language, "themeLight")}</option>
+          <option value="dark">{text(language, "themeDark")}</option>
+          <option value="system">{text(language, "themeSystem")}</option>
         </select>
 
         <label className="field-label" htmlFor="default-model">

@@ -44,7 +44,7 @@ def test_evidence_ref_preserves_page_and_section():
     assert evidence.page == "p.6"
     assert evidence.section == "4 Evaluation"
     assert "F1" in evidence.quote
-    assert evidence.claim == "实验指标"
+    assert evidence.claim_type == "evaluation_protocol"
 
 
 def test_audit_reproduction_gaps_classifies_missing_items():
@@ -64,16 +64,12 @@ def test_audit_reproduction_gaps_classifies_missing_items():
 
 
 def test_markdown_report_contains_audit_sections():
-    evidence = EvidenceRef(claim="主实验", page="p.5", section="Experiments", quote="We evaluate on ReproBench.", role="experiment")
+    evidence = EvidenceRef(claim_type="main_result", page="p.5", section="Experiments", quote="We evaluate on ReproBench.")
     missing = MissingItem(category="dataset", item="缺少数据下载地址", severity="high", suggested_action="核查附录。")
     report = build_markdown_report(
         metadata=PaperMetadata(title="Example Paper"),
         classification=PaperTypeClassification(
-            domain="llm",
-            paper_type="experimental",
-            reproduction_mode="benchmark_evaluation",
-            difficulty="medium",
-            suitability_for_mvp="partial",
+            paper_types=["llm_application"],
         ),
         understanding=PaperUnderstanding(
             background="背景",
@@ -88,12 +84,12 @@ def test_markdown_report_contains_audit_sections():
             method_summary="方法",
             modules=[
                 MethodModule(
-                    name="core_method",
+                    module_name="core_method",
+                    paper_section="3 Method",
                     responsibility="核心方法",
-                    inputs=["x"],
-                    outputs=["y"],
-                    interface_contract="x -> y",
-                    evidence=[evidence],
+                    known_inputs=["x"],
+                    known_outputs=["y"],
+                    evidence_quote=evidence.quote,
                 )
             ],
             algorithm_steps=[AlgorithmStep(step=1, name="run", description="运行核心方法", evidence=[evidence])],
@@ -124,11 +120,16 @@ def test_markdown_report_contains_audit_sections():
         ),
         reproduction=ReproductionPlan(
             audit_summary="可以做部分复现。",
-            confidence="medium",
             recommended_first_experiment="先跑 ReproBench F1。",
             feasibility_summary="可部分复现。",
-            feasibility_level="medium",
-            minimum_reproduction_goal="最小目标",
+            mvp_pipeline_feasibility="medium",
+            full_reproduction_difficulty="medium",
+            report_confidence="medium",
+            dependency_availability_difficulty="medium",
+            data_availability_difficulty="medium",
+            compute_cost_difficulty="medium",
+            implementation_complexity_difficulty="medium",
+            minimum_reproduction_goal="pipeline_reproduction",
             experiment_checklist=[ChecklistItem(item="跑通最小实验")],
             blocking_missing_items=[missing],
             acceptance_criteria=["输出 F1 并记录差距。"],
