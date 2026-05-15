@@ -11,6 +11,7 @@ class AppSettingsResponse(BaseModel):
     base_url: str
     default_model: str
     available_models: list[str]
+    timeout_seconds: float
     ui_language: LanguageCode
     report_language: LanguageCode
     theme: ThemeMode

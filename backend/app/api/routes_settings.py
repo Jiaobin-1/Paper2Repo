@@ -58,6 +58,7 @@ def _settings_response() -> AppSettingsResponse:
         base_url=settings.openai_base_url,
         default_model=get_default_model(),
         available_models=settings.available_openai_models,
+        timeout_seconds=settings.openai_timeout_seconds,
         ui_language=cast(LanguageCode, get_ui_language()),
         report_language=cast(LanguageCode, get_report_language()),
         theme=cast(ThemeMode, get_theme()),

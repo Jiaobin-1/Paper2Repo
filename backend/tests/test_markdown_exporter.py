@@ -127,8 +127,20 @@ class TestBuildMarkdownReport:
         )
         assert "读懂论文得到的信息" in report
         assert "转化出的复现决策" in report
+        assert "证据来源" in report
         assert "The core problem." in report
         assert "First exp." in report
+
+    def test_read_to_reproduce_roadmap_cites_evidence_sources(self):
+        understanding = _minimal_understanding()
+        understanding.evidence_refs = [
+            EvidenceRef(claim_type="problem", page="p.3", section="Introduction", chunk_id="chunk-2", quote="Problem evidence."),
+        ]
+        report = build_markdown_report(
+            _minimal_metadata(), _minimal_classification(), understanding,
+            _minimal_method(), _minimal_experiments(), _minimal_reproduction(),
+        )
+        assert "p.3 / Introduction / chunk-2: Problem evidence." in report
 
     def test_minimal_inputs_produce_valid_report(self):
         report = build_markdown_report(

@@ -1,4 +1,4 @@
-import type { AppSettings, AppSettingsUpdate, ArxivInfo, AvailableRun, BatchStartResponse, BatchStatusResponse, BatchUploadResponse, CitationInfo, CitationEdge, ComparisonRun, KnowledgePaper, KnowledgeSearchResult, LlmConfig, Paper, PwcLink, QaMessage, Report, Run, RunListItem } from "./types";
+import type { AppSettings, AppSettingsUpdate, ArxivInfo, AvailableRun, BatchStartResponse, BatchStatusResponse, BatchUploadResponse, CitationInfo, CitationEdge, ComparisonRun, KnowledgePaper, KnowledgeSearchResult, LlmCheck, LlmConfig, Paper, PwcLink, QaMessage, Report, Run, RunListItem } from "./types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 
@@ -129,6 +129,19 @@ export async function updateLlmConfig(defaultModel: string): Promise<LlmConfig> 
   if (!response.ok) {
     const body = await response.json().catch(() => null);
     throw new Error(formatApiError(body?.detail ?? "模型配置更新失败。"));
+  }
+
+  return response.json();
+}
+
+export async function checkLlmConnection(): Promise<LlmCheck> {
+  const response = await fetch(`${API_BASE_URL}/api/llm/check`, {
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(formatApiError(body?.detail ?? "模型连接测试失败。"));
   }
 
   return response.json();

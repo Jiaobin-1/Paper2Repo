@@ -2,7 +2,7 @@ from app.schemas.chunks import ChunkedPaper, ChunkMetadata, PaperChunk, Retrieve
 from app.schemas.classification import PaperTypeClassification
 from app.schemas.common import EvidenceRef, MissingItem
 from app.schemas.experiments import DatasetInfo, ExperimentAnalysis, ExperimentMatrixItem
-from app.schemas.llm import LLMConfigResponse, LLMConfigUpdateRequest
+from app.schemas.llm import LLMCheckResponse, LLMConfigResponse, LLMConfigUpdateRequest
 from app.schemas.metadata import PaperMetadata, SectionInfo
 from app.schemas.method import AlgorithmStep, MethodAnalysis, MethodModule
 from app.schemas.paper import PaperResponse, RunListItemResponse, RunResponse
@@ -32,6 +32,7 @@ __all__ = [
     "ExperimentAnalysis",
     "ExperimentMatrixItem",
     "ImplementationStep",
+    "LLMCheckResponse",
     "LLMConfigResponse",
     "LLMConfigUpdateRequest",
     "MarkdownReport",

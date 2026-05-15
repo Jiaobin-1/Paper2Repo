@@ -1,4 +1,4 @@
-import { displayProgressPercent, formatStepLabel, getStepStates, WORKFLOW_STEPS } from "../../../lib/runPresentation";
+import { displayProgressPercent, formatRunTiming, formatStepLabel, getStepStates, WORKFLOW_STEPS } from "../../../lib/runPresentation";
 import { useAppLanguage } from "../../../lib/useAppLanguage";
 import { text } from "../../../lib/i18n";
 import type { Run } from "../../../lib/types";
@@ -16,6 +16,7 @@ export function WorkflowProgress({ run }: { run: Run }) {
           <p className="muted">
             {text(language, "currentStep")}：{formatStepLabel(run.current_step, language)}
           </p>
+          <p className="muted">{formatRunTiming(run, language)}</p>
         </div>
         <strong>{progress}%</strong>
       </div>

@@ -5,6 +5,7 @@ import {
   boundedProgress,
   displayProgressPercent,
   formatProgressMessage,
+  formatRunTiming,
   formatRunStatus,
   formatRunStatusWithProgress,
   formatStepLabel,
@@ -29,8 +30,8 @@ function makeRun(overrides: Partial<Run> = {}): Run {
 }
 
 describe("WORKFLOW_STEPS", () => {
-  it("has 10 steps", () => {
-    expect(WORKFLOW_STEPS).toHaveLength(10);
+  it("has 11 steps", () => {
+    expect(WORKFLOW_STEPS).toHaveLength(11);
   });
 
   it("starts with parse_pdf_node", () => {
@@ -39,6 +40,10 @@ describe("WORKFLOW_STEPS", () => {
 
   it("ends with persist_result_node", () => {
     expect(WORKFLOW_STEPS[WORKFLOW_STEPS.length - 1].key).toBe("persist_result_node");
+  });
+
+  it("includes citation extraction to match the backend pipeline", () => {
+    expect(WORKFLOW_STEPS.some((step) => step.key === "extract_citations_node")).toBe(true);
   });
 });
 
@@ -150,11 +155,23 @@ describe("formatRunStatusWithProgress", () => {
   });
 });
 
+describe("formatRunTiming", () => {
+  it("shows elapsed time for the current running step", () => {
+    const run = makeRun({ status: "running", updated_at: "2025-01-01T00:00:00Z" });
+    expect(formatRunTiming(run, "zh", new Date("2025-01-01T00:03:30Z"))).toBe("当前步骤已运行：3分钟");
+  });
+
+  it("shows last updated time for completed runs", () => {
+    const run = makeRun({ status: "completed", updated_at: "2025-01-01T00:00:00Z" });
+    expect(formatRunTiming(run, "en", new Date("2025-01-01T02:00:00Z"))).toBe("Last updated: 2h ago");
+  });
+});
+
 describe("getStepStates", () => {
   it("all done when completed", () => {
     const run = makeRun({ status: "completed", progress_percent: 100 });
     const states = getStepStates(run);
-    expect(states).toHaveLength(10);
+    expect(states).toHaveLength(11);
     expect(states.every((s) => s === "done")).toBe(true);
   });
 
@@ -163,8 +180,9 @@ describe("getStepStates", () => {
     const states = getStepStates(run);
     expect(states[0]).toBe("done");
     expect(states[1]).toBe("done");
-    expect(states[2]).toBe("failed");
-    expect(states[3]).toBe("pending");
+    expect(states[2]).toBe("done");
+    expect(states[3]).toBe("failed");
+    expect(states[4]).toBe("pending");
   });
 
   it("marks active step for running status", () => {

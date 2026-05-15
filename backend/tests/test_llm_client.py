@@ -278,6 +278,30 @@ class TestStructuredOutputModes:
         assert client.last_call_meta["mode"] == "chat_structured"
         assert client.last_call_meta["attempts"] == 2
 
+    def test_timeout_skips_additional_structured_attempts(self, isolated_settings, monkeypatch):
+        client = _configured_client(monkeypatch, isolated_settings)
+        fallback_called = False
+
+        def timeout_attempt(**_kwargs):
+            raise TimeoutError("request timed out")
+
+        def fallback_attempt(**_kwargs):
+            nonlocal fallback_called
+            fallback_called = True
+            raise AssertionError("fallback should not be called after timeout")
+
+        monkeypatch.setattr(client, "_supports_responses_api", lambda: True)
+        monkeypatch.setattr(client, "_structured_output_responses", timeout_attempt)
+        monkeypatch.setattr(client, "_structured_output_chat_schema", fallback_attempt)
+        monkeypatch.setattr(client, "_structured_output_json_legacy", fallback_attempt)
+
+        with pytest.raises(TimeoutError):
+            client.structured_output(system_prompt="system", user_prompt="user", schema_model=_TinySchema)
+
+        assert fallback_called is False
+        assert client.last_call_meta["timed_out"] is True
+        assert client.last_call_meta["attempts"] == 1
+
     def test_non_official_base_url_uses_legacy_json_mode(self, isolated_settings, monkeypatch):
         responses_calls: list[dict] = []
         chat_calls: list[dict] = []

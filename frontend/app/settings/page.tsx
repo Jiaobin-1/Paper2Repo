@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getAppSettings, updateAppSettings } from "../../lib/api";
+import { checkLlmConnection, getAppSettings, updateAppSettings } from "../../lib/api";
 import { text } from "../../lib/i18n";
 import { SETTINGS_UPDATED_EVENT, useAppLanguage } from "../../lib/useAppLanguage";
 import type { AppSettings, LanguageCode, ThemeMode } from "../../lib/types";
@@ -15,6 +15,7 @@ export default function SettingsPage() {
   const [theme, setTheme] = useState<ThemeMode>("light");
   const [message, setMessage] = useState(text(language, "settingsLoadFailed"));
   const [isSaving, setIsSaving] = useState(false);
+  const [isChecking, setIsChecking] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -57,6 +58,20 @@ export default function SettingsPage() {
       setMessage(error instanceof Error ? error.message : text(language, "settingsLoadFailed"));
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  async function handleCheckModel() {
+    setIsChecking(true);
+    try {
+      const result = await checkLlmConnection();
+      const latency = result.latency_ms === null ? "" : ` · ${Math.round(result.latency_ms)}ms`;
+      const error = result.error ? ` · ${result.error}` : "";
+      setMessage(`${text(language, result.ok ? "modelCheckPassed" : "modelCheckFailed")} · ${result.model}${latency}${error}`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : text(language, "modelCheckFailed"));
+    } finally {
+      setIsChecking(false);
     }
   }
 
@@ -118,13 +133,16 @@ export default function SettingsPage() {
 
         <p className="muted">
           {settings
-            ? `${settings.configured ? text(language, "modelConfigured") : text(language, "modelNotConfigured")} · ${settings.base_url}`
+            ? `${settings.configured ? text(language, "modelConfigured") : text(language, "modelNotConfigured")} · ${settings.base_url} · ${text(language, "modelTimeoutSetting")} ${settings.timeout_seconds}s`
             : text(language, "loadingModelConfig")}
         </p>
 
         <div className="action-row">
           <button className="button" type="button" disabled={!settings || isSaving} onClick={handleSave}>
             {isSaving ? text(language, "savingSettings") : text(language, "saveSettings")}
+          </button>
+          <button className="button secondary" type="button" disabled={!settings || isChecking} onClick={handleCheckModel}>
+            {isChecking ? text(language, "testingModelConnection") : text(language, "testModelConnection")}
           </button>
         </div>
 

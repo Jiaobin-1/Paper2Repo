@@ -5,6 +5,7 @@ export const mockSettings = {
   base_url: "https://api.openai.com/v1",
   default_model: "test",
   available_models: ["test", "gpt-4o"],
+  timeout_seconds: 60,
   ui_language: "zh",
   report_language: "en",
   theme: "light",
@@ -24,6 +25,22 @@ export async function mockAppApis(page: Page) {
       status: 200,
       contentType: "application/json",
       body: JSON.stringify([]),
+    }),
+  );
+
+  await page.route("**/api/llm/check", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        configured: true,
+        ok: true,
+        base_url: mockSettings.base_url,
+        model: mockSettings.default_model,
+        timeout_seconds: mockSettings.timeout_seconds,
+        latency_ms: 12,
+        error: null,
+      }),
     }),
   );
 }

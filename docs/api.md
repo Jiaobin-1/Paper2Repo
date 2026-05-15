@@ -61,3 +61,4 @@ Start the backend and open `http://127.0.0.1:8000/docs` for Swagger UI.
 - `PUT /api/settings`: update app settings.
 - `GET /api/llm/config`: get LLM configuration.
 - `PUT /api/llm/config`: update the default model.
+- `POST /api/llm/check`: run a short model connectivity check for the current default model.

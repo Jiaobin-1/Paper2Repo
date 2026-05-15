@@ -9,7 +9,7 @@ The app works without an API key by using deterministic local fallback analysis.
 - PDF upload, validation, parsing, section detection, and text chunking.
 - arXiv import, arXiv version lookup, and version-comparison workflow.
 - 11-node analysis pipeline: parse, chunk, citation extraction, metadata extraction, paper classification, understanding, method analysis, experiment analysis, reproduction planning, report generation, persistence.
-- Structured Markdown report with evidence references, missing-item audit, method modules, experiment matrix, risks, acceptance criteria, and code skeleton plan.
+- Structured Markdown report with evidence references, missing-item audit, understand-to-reproduce roadmap, method modules, experiment matrix, risks, acceptance criteria, and code skeleton plan.
 - Report downloads as Markdown, PDF, HTML, and LaTeX.
 - Q&A over completed reports, including SSE streaming.
 - Code skeleton zip generation from the reproduction plan.
@@ -30,7 +30,7 @@ The app works without an API key by using deterministic local fallback analysis.
 | LLM | OpenAI-compatible chat API, optional |
 | Embeddings | sentence-transformers `all-MiniLM-L6-v2` |
 | Frontend | Next.js 16, React 19, TypeScript |
-| Testing | pytest 171 tests, vitest 31 tests, Playwright 20 tests |
+| Testing | pytest 176 tests, vitest 34 tests, Playwright 21 tests |
 | Quality | ruff, mypy, TypeScript |
 
 ## Quick Start
@@ -129,6 +129,7 @@ Swagger UI is available at `http://127.0.0.1:8000/docs`.
 | `GET` | `/api/knowledge/papers` | List indexed papers |
 | `GET/PUT` | `/api/settings` | App settings |
 | `GET/PUT` | `/api/llm/config` | LLM config |
+| `POST` | `/api/llm/check` | Test current model connectivity |
 
 ## Frontend Routes
 
@@ -139,7 +140,7 @@ Swagger UI is available at `http://127.0.0.1:8000/docs`.
 | `/arxiv` | arXiv import/version workflows |
 | `/knowledge` | Knowledge-base semantic search |
 | `/compare` | Multi-paper comparison |
-| `/settings` | UI/report language, model, and theme settings |
+| `/settings` | UI/report language, model, theme, and model connectivity settings |
 | `/runs/[runId]` | Report, Q&A, downloads, citations |
 | `/papers/[paperId]` | Paper details and run history |
 

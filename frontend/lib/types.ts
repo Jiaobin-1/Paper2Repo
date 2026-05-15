@@ -31,6 +31,17 @@ export type LlmConfig = {
   base_url: string;
   default_model: string;
   available_models: string[];
+  timeout_seconds: number;
+};
+
+export type LlmCheck = {
+  configured: boolean;
+  ok: boolean;
+  base_url: string;
+  model: string;
+  timeout_seconds: number;
+  latency_ms: number | null;
+  error: string | null;
 };
 
 export type LanguageCode = "zh" | "en";

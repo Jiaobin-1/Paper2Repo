@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.schemas.classification import PaperTypeClassification
+from app.schemas.common import EvidenceRef
 from app.schemas.experiments import ExperimentAnalysis
 from app.schemas.metadata import PaperMetadata
 from app.schemas.method import MethodAnalysis
@@ -292,6 +293,7 @@ def _read_to_reproduce_table(
                 reproduction.recommended_first_experiment,
                 *reproduction.reproduction_scope[:2],
             ]), lang),
+            _evidence_digest(_understanding_evidence(understanding), lang),
         ),
         (
             lang.rr_method_contract,
@@ -303,6 +305,7 @@ def _read_to_reproduce_table(
                 _join_limited([module.name for module in reproduction.required_modules], lang, 3),
                 _join_limited([item.path for item in reproduction.code_structure], lang, 4),
             ]), lang),
+            _evidence_digest(_method_evidence(method), lang),
         ),
         (
             lang.rr_experiment_target,
@@ -316,6 +319,7 @@ def _read_to_reproduce_table(
                 _join_limited(reproduction.evaluation_plan, lang, 2),
                 _join_limited(reproduction.acceptance_criteria, lang, 2),
             ]), lang),
+            _evidence_digest(_experiment_evidence(experiments), lang),
         ),
         (
             lang.rr_risk_control,
@@ -329,13 +333,17 @@ def _read_to_reproduce_table(
                 _join_limited([item.item for item in reproduction.blocking_missing_items], lang, 2),
                 _join_limited(reproduction.suggested_simplifications, lang, 2),
             ]), lang),
+            _evidence_digest([*reproduction.evidence_refs, *_understanding_evidence(understanding)], lang),
         ),
     ]
     header = (
-        f"| {lang.rr_stage} | {lang.rr_understanding_signal} | {lang.rr_reproduction_decision} |\n"
-        "| --- | --- | --- |"
+        f"| {lang.rr_stage} | {lang.rr_understanding_signal} | {lang.rr_reproduction_decision} | {lang.rr_evidence_source} |\n"
+        "| --- | --- | --- | --- |"
     )
-    body = "\n".join(f"| {_cell(stage)} | {_cell(signal)} | {_cell(decision)} |" for stage, signal, decision in rows)
+    body = "\n".join(
+        f"| {_cell(stage)} | {_cell(signal)} | {_cell(decision)} | {_cell(evidence)} |"
+        for stage, signal, decision, evidence in rows
+    )
     return f"{header}\n{body}\n"
 
 
@@ -350,3 +358,57 @@ def _join_limited(items: list[str], lang: Lang, limit: int) -> str:
 def _compact(value: str, lang: Lang) -> str:
     compacted = " ".join(value.split())
     return compacted or lang.no_value
+
+
+def _understanding_evidence(understanding: PaperUnderstanding) -> list[EvidenceRef]:
+    refs = list(understanding.evidence_refs)
+    for task in understanding.reading_tasks:
+        refs.extend(task.evidence)
+    return refs
+
+
+def _method_evidence(method: MethodAnalysis) -> list[EvidenceRef]:
+    refs = list(method.evidence_refs)
+    for step in method.algorithm_steps:
+        refs.extend(step.evidence)
+    for module in method.modules:
+        if module.evidence_quote:
+            refs.append(
+                EvidenceRef(
+                    claim_type="key_module",
+                    section=module.paper_section,
+                    quote=module.evidence_quote,
+                )
+            )
+    return refs
+
+
+def _experiment_evidence(experiments: ExperimentAnalysis) -> list[EvidenceRef]:
+    refs = list(experiments.evidence_refs)
+    for dataset in experiments.datasets:
+        refs.extend(dataset.evidence)
+    for item in experiments.reproduction_matrix:
+        refs.extend(item.evidence)
+    return refs
+
+
+def _evidence_digest(refs: list[EvidenceRef], lang: Lang, limit: int = 2) -> str:
+    formatted = [_format_evidence_ref(ref, lang) for ref in refs]
+    values = [item for item in formatted if item]
+    if not values:
+        return lang.no_value
+    suffix = "" if len(values) <= limit else ("等" if lang.lang_code == "zh" else " and more")
+    return "; ".join(values[:limit]) + suffix
+
+
+def _format_evidence_ref(ref: EvidenceRef, lang: Lang) -> str:
+    source_parts = [part for part in [ref.page, ref.section, ref.chunk_id] if part]
+    source = " / ".join(source_parts)
+    quote = _compact(ref.quote, lang)
+    if quote == lang.no_value:
+        quote = ""
+    if len(quote) > 140:
+        quote = f"{quote[:137]}..."
+    if source and quote:
+        return f"{source}: {quote}"
+    return source or quote

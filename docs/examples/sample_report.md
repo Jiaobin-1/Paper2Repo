@@ -12,7 +12,16 @@
 - 复现难度：medium
 - MVP 适配度：good
 
-## 2. 读懂论文
+## 2. 读懂到复现路线图
+
+| 环节 | 读懂论文得到的信息 | 转化出的复现决策 | 证据来源 |
+| --- | --- | --- | --- |
+| 问题与目标 | 论文要连接 PDF 理解和工程复现规划。 | 第一版实现本地最小闭环：上传 PDF，输出复现报告和代码骨架。 | p.1 / Abstract / chunk-0: turn paper understanding into executable reproduction plans |
+| 方法与模块 | 方法包含 PDF 解析、检索、结构化理解和复现规划。 | 代码拆成 parser、retrieval、agent nodes、exporter 四类模块。 | p.3 / Method / chunk-8: retrieval-augmented agents decompose papers into modules |
+| 实验与验收 | 主实验验证报告是否覆盖数据集、指标、baseline 和风险项。 | 验收标准是生成可追溯报告、最小运行骨架和明确缺失信息。 | p.6 / Experiments / chunk-18: evaluate report completeness and reproduction readiness |
+| 风险与缺口 | 闭源数据、权重和 PDF 文本质量会影响复现。 | 报告必须保留 blocking gaps，并给出 toy fallback 或人工核查动作。 | p.8 / Limitations / chunk-25: closed data and noisy PDFs remain blockers |
+
+## 3. 读懂论文
 
 ### 研究背景
 
@@ -38,7 +47,7 @@
 - 若论文依赖闭源数据或未公开权重，系统只能给出风险提示和替代方案。
 - 第一版不做联网搜索和完整代码生成。
 
-## 3. 方法拆解
+## 4. 方法拆解
 
 ### 方法整体框架
 
@@ -64,7 +73,7 @@
 - 输出：最小复现目标、代码目录骨架、实现步骤、风险点和 checklist
 - 实现要点：复现计划必须依赖前序结构化结果，避免泛泛总结。
 
-## 4. 实验分析
+## 5. 实验分析
 
 ### 数据集
 
@@ -90,7 +99,7 @@
 - 去掉方法拆解节点，直接生成复现计划。
 - 去掉实验分析节点，观察指标和数据集提取质量下降。
 
-## 5. 复现规划
+## 6. 复现规划
 
 ### 最小复现目标
 

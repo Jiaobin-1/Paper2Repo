@@ -67,8 +67,14 @@ test.describe("Settings page", () => {
   test("displays the save button", async ({ page }) => {
     await page.goto("/settings");
 
-    const saveButton = page.locator('button[type="button"].button');
+    const saveButton = page.getByRole("button", { name: "保存设置" });
     await expect(saveButton).toBeVisible();
-    await expect(saveButton).toContainText("保存设置");
+  });
+
+  test("can run model connection check", async ({ page }) => {
+    await page.goto("/settings");
+
+    await page.getByRole("button", { name: "测试模型连接" }).click();
+    await expect(page.locator(".muted").filter({ hasText: "模型连接正常" })).toBeVisible();
   });
 });

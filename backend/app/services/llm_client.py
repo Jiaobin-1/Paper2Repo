@@ -67,6 +67,9 @@ class LLMClient:
                 )
             except Exception as exc:
                 errors.append(f"responses_structured: {exc}")
+                if _is_timeout_error(exc):
+                    self._record_structured_failure("responses_structured", schema_model, attempts, errors, timed_out=True)
+                    raise
                 logger.warning("Responses structured output failed; falling back to Chat Completions", exc_info=True)
 
             attempts += 1
@@ -80,6 +83,9 @@ class LLMClient:
                 )
             except Exception as exc:
                 errors.append(f"chat_structured: {exc}")
+                if _is_timeout_error(exc):
+                    self._record_structured_failure("chat_structured", schema_model, attempts, errors, timed_out=True)
+                    raise
                 logger.warning("Chat structured output failed; falling back to JSON mode", exc_info=True)
 
         attempts += 1
@@ -93,13 +99,7 @@ class LLMClient:
             )
         except Exception as exc:
             errors.append(f"chat_json_legacy: {exc}")
-            self.last_call_meta = {
-                "mode": "chat_json_legacy",
-                "model": self.model_name,
-                "schema": schema_model.__name__,
-                "attempts": attempts,
-                "errors": errors,
-            }
+            self._record_structured_failure("chat_json_legacy", schema_model, attempts, errors, timed_out=_is_timeout_error(exc))
             raise
 
     def _structured_output_responses(
@@ -273,6 +273,24 @@ class LLMClient:
         }
         logger.info("LLM structured call completed", extra={"llm_call": self.last_call_meta})
 
+    def _record_structured_failure(
+        self,
+        mode: str,
+        schema_model: type[BaseModel],
+        attempts: int,
+        errors: list[str],
+        *,
+        timed_out: bool = False,
+    ) -> None:
+        self.last_call_meta = {
+            "mode": mode,
+            "model": self.model_name,
+            "schema": schema_model.__name__,
+            "attempts": attempts,
+            "errors": errors,
+            "timed_out": timed_out,
+        }
+
 
 def _schema_name(schema_model: type[BaseModel]) -> str:
     return re.sub(r"[^A-Za-z0-9_]+", "_", schema_model.__name__)[:64] or "StructuredOutput"
@@ -301,6 +319,12 @@ def _usage_dict(usage) -> dict | None:
     if isinstance(usage, dict):
         return usage
     return dict(getattr(usage, "__dict__", {}))
+
+
+def _is_timeout_error(exc: Exception) -> bool:
+    name = exc.__class__.__name__.lower()
+    message = str(exc).lower()
+    return isinstance(exc, TimeoutError) or "timeout" in name or "timed out" in message or "read timed out" in message
 
 
 def _load_json_object(content: str) -> dict:

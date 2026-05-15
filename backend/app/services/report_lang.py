@@ -53,6 +53,7 @@ class Lang:
     rr_stage: str = ""
     rr_understanding_signal: str = ""
     rr_reproduction_decision: str = ""
+    rr_evidence_source: str = ""
     rr_core_question: str = ""
     rr_method_contract: str = ""
     rr_experiment_target: str = ""
@@ -181,7 +182,7 @@ ZH = Lang(
     h_audit="## 0. 复现审计摘要",
     h_read_to_reproduce="### 读懂到复现路线图",
     rr_intro="这张表把论文理解结论转成复现决策，用来说明每个复现动作来自哪类论文信息。",
-    rr_stage="环节", rr_understanding_signal="读懂论文得到的信息", rr_reproduction_decision="转化出的复现决策",
+    rr_stage="环节", rr_understanding_signal="读懂论文得到的信息", rr_reproduction_decision="转化出的复现决策", rr_evidence_source="证据来源",
     rr_core_question="问题与目标", rr_method_contract="方法与模块", rr_experiment_target="实验与验收", rr_risk_control="风险与缺口",
     h_repro_level="可复现等级", h_audit_summary="审计结论", h_first_step="推荐第一步",
     h_biggest_blocker="最大阻塞", h_confidence="可信度",
@@ -249,7 +250,7 @@ EN = Lang(
     h_audit="## 0. Reproduction Audit Summary",
     h_read_to_reproduce="### Understand-to-Reproduce Roadmap",
     rr_intro="This table turns paper-understanding signals into reproduction decisions, so each action is traceable to paper content.",
-    rr_stage="Stage", rr_understanding_signal="Paper-understanding signal", rr_reproduction_decision="Reproduction decision",
+    rr_stage="Stage", rr_understanding_signal="Paper-understanding signal", rr_reproduction_decision="Reproduction decision", rr_evidence_source="Evidence source",
     rr_core_question="Problem and goal", rr_method_contract="Method and modules", rr_experiment_target="Experiment and acceptance", rr_risk_control="Risks and gaps",
     h_repro_level="Reproducibility level", h_audit_summary="Audit summary", h_first_step="Recommended first step",
     h_biggest_blocker="Biggest blocker", h_confidence="Confidence",
