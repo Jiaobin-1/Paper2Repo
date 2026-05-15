@@ -8,6 +8,7 @@ from app.schemas.reproduction import ReproductionPlan
 from app.schemas.understanding import PaperUnderstanding
 from app.services.report_helpers import (
     _bullets,
+    _cell,
     _checkboxes,
     _evidence_table,
     _experiment_matrix,
@@ -92,6 +93,7 @@ def _build_report(
         f"- **{_label(L.level_labels, r.impact)}**：{r.risk}；{L.rk_mitigation_label}：{r.mitigation or not_spec}"
         for r in reproduction.risk_points
     ) or L.no_risks
+    read_to_reproduce = _read_to_reproduce_table(understanding, method, experiments, reproduction, L)
 
     evidence_refs = [
         *understanding.evidence_refs,
@@ -129,6 +131,11 @@ def _build_report(
 
 {L.h_blocking_gaps}
 {_missing_table(reproduction.blocking_missing_items, L)}
+
+{L.h_read_to_reproduce}
+{L.rr_intro}
+
+{read_to_reproduce}
 
 {L.h_evidence_map}
 {_evidence_table(evidence_refs, L)}
@@ -267,3 +274,79 @@ def _build_report(
 
 {checklist}
 """
+
+
+def _read_to_reproduce_table(
+    understanding: PaperUnderstanding,
+    method: MethodAnalysis,
+    experiments: ExperimentAnalysis,
+    reproduction: ReproductionPlan,
+    lang: Lang,
+) -> str:
+    rows = [
+        (
+            lang.rr_core_question,
+            _compact("; ".join([understanding.core_problem, *understanding.main_contributions[:2]]), lang),
+            _compact("; ".join([
+                reproduction.minimum_reproduction_goal,
+                reproduction.recommended_first_experiment,
+                *reproduction.reproduction_scope[:2],
+            ]), lang),
+        ),
+        (
+            lang.rr_method_contract,
+            _compact("; ".join([
+                method.system_framework or method.method_summary,
+                _join_limited([module.module_name for module in method.modules], lang, 3),
+            ]), lang),
+            _compact("; ".join([
+                _join_limited([module.name for module in reproduction.required_modules], lang, 3),
+                _join_limited([item.path for item in reproduction.code_structure], lang, 4),
+            ]), lang),
+        ),
+        (
+            lang.rr_experiment_target,
+            _compact("; ".join([
+                _join_limited([dataset.name for dataset in experiments.datasets], lang, 3),
+                _join_limited(experiments.metrics, lang, 4),
+                experiments.evaluation_protocol,
+            ]), lang),
+            _compact("; ".join([
+                _join_limited(reproduction.dataset_plan, lang, 2),
+                _join_limited(reproduction.evaluation_plan, lang, 2),
+                _join_limited(reproduction.acceptance_criteria, lang, 2),
+            ]), lang),
+        ),
+        (
+            lang.rr_risk_control,
+            _compact("; ".join([
+                _join_limited(understanding.key_assumptions, lang, 2),
+                _join_limited([limitation.description for limitation in understanding.limitations], lang, 2),
+                _join_limited([item.item for item in understanding.missing_items], lang, 2),
+            ]), lang),
+            _compact("; ".join([
+                _join_limited([risk.risk for risk in reproduction.risk_points], lang, 2),
+                _join_limited([item.item for item in reproduction.blocking_missing_items], lang, 2),
+                _join_limited(reproduction.suggested_simplifications, lang, 2),
+            ]), lang),
+        ),
+    ]
+    header = (
+        f"| {lang.rr_stage} | {lang.rr_understanding_signal} | {lang.rr_reproduction_decision} |\n"
+        "| --- | --- | --- |"
+    )
+    body = "\n".join(f"| {_cell(stage)} | {_cell(signal)} | {_cell(decision)} |" for stage, signal, decision in rows)
+    return f"{header}\n{body}\n"
+
+
+def _join_limited(items: list[str], lang: Lang, limit: int) -> str:
+    values = [item for item in items if item]
+    if not values:
+        return ""
+    suffix = "" if len(values) <= limit else ("等" if lang.lang_code == "zh" else " and more")
+    return ", ".join(values[:limit]) + suffix
+
+
+def _compact(value: str, lang: Lang) -> str:
+    compacted = " ".join(value.split())
+    return compacted or lang.no_value

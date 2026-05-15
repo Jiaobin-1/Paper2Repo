@@ -106,6 +106,7 @@ class TestBuildMarkdownReport:
             _minimal_method(), _minimal_experiments(), _minimal_reproduction(), language="zh",
         )
         assert "## 0. 复现审计摘要" in report
+        assert "### 读懂到复现路线图" in report
         assert "## 1. 论文基本信息" in report
         assert "### 复现难度拆解" in report
 
@@ -115,8 +116,19 @@ class TestBuildMarkdownReport:
             _minimal_method(), _minimal_experiments(), _minimal_reproduction(), language="en",
         )
         assert "## 0. Reproduction Audit Summary" in report
+        assert "### Understand-to-Reproduce Roadmap" in report
         assert "## 1. Paper Metadata" in report
         assert "### Difficulty Breakdown" in report
+
+    def test_report_maps_understanding_to_reproduction_decisions(self):
+        report = build_markdown_report(
+            _minimal_metadata(), _minimal_classification(), _minimal_understanding(),
+            _minimal_method(), _minimal_experiments(), _minimal_reproduction(),
+        )
+        assert "读懂论文得到的信息" in report
+        assert "转化出的复现决策" in report
+        assert "The core problem." in report
+        assert "First exp." in report
 
     def test_minimal_inputs_produce_valid_report(self):
         report = build_markdown_report(

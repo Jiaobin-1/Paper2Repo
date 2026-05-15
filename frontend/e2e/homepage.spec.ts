@@ -20,7 +20,7 @@ test.describe("Homepage", () => {
     const subtitle = page.locator("h1 + p.muted");
     await expect(subtitle).toBeVisible();
     // Default language is zh, so expect the Chinese subtitle
-    await expect(subtitle).toContainText("AI");
+    await expect(subtitle).toContainText("复现计划");
   });
 
   test("displays the drop-zone upload area", async ({ page }) => {
@@ -62,6 +62,6 @@ test.describe("Homepage", () => {
     await page.goto("/");
 
     const panels = page.locator(".grid .panel");
-    await expect(panels).toHaveCount(2);
+    await expect(panels).toHaveCount(3);
   });
 });
