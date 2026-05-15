@@ -58,10 +58,13 @@ test.describe("Homepage", () => {
     await expect(settingsLink).toBeVisible();
   });
 
-  test("displays feature panels", async ({ page }) => {
+  test("renders the agent workbench without legacy feature panels", async ({ page }) => {
     await page.goto("/");
 
-    const panels = page.locator(".grid .panel");
-    await expect(panels).toHaveCount(3);
+    await expect(page.locator(".home-workbench")).toBeVisible();
+    await expect(page.locator(".upload-panel")).toBeVisible();
+    await expect(page.locator(".run-history-compact")).toBeVisible();
+    await expect(page.locator(".feature-card")).toHaveCount(0);
+    await expect(page.locator(".grid .panel")).toHaveCount(0);
   });
 });
