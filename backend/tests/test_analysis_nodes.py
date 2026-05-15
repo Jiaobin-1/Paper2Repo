@@ -21,6 +21,7 @@ from app.agents.nodes.extract_metadata import (
 from app.schemas.chunks import ChunkMetadata, PaperChunk
 from app.schemas.metadata import PaperMetadata
 from app.schemas.parsed import PageText, ParsedPaper
+from app.services import retrieval
 from app.services.retrieval import retrieve_context
 
 # ---------------------------------------------------------------------------
@@ -281,7 +282,8 @@ class TestRetrieveContext:
         results = retrieve_context([], query="anything")
         assert results == []
 
-    def test_score_cap_per_term(self):
+    def test_score_cap_per_term(self, monkeypatch):
+        monkeypatch.setattr(retrieval, "_HAS_EMBEDDINGS", False)
         text = "attention " * 20
         chunks = [_make_chunk(0, text)]
         results = retrieve_context(chunks, query="attention", top_k=1)
