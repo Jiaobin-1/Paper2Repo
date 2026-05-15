@@ -1,15 +1,25 @@
 # Paper2Repo
 
-Turn research papers into evidence-grounded reproduction plans.
+Local-first agent workspace for turning research papers into evidence-grounded reproduction plans.
 
 [![CI](https://github.com/Jiaobin-1/Paper2Repo/actions/workflows/ci.yml/badge.svg)](https://github.com/Jiaobin-1/Paper2Repo/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB)
 ![Next.js](https://img.shields.io/badge/Next.js-16-000000)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-Paper2Repo is a local-first agent system for reading AI papers and turning them into practical reproduction artifacts. Upload a PDF or import an arXiv paper, run the LangGraph workflow, and get a structured report that connects paper understanding, method and experiment breakdown, evidence references, risks, and a minimal code skeleton plan.
+Paper2Repo reads AI papers as a reproducibility workflow, not just a summary task. Upload a PDF or import an arXiv paper, run the LangGraph workflow, and get a structured report that connects paper understanding, method and experiment breakdown, evidence references, risks, and a minimal code skeleton plan.
 
 It works without an API key through deterministic local fallbacks. With `OPENAI_API_KEY`, the same workflow uses an OpenAI-compatible chat API for richer analysis and Q&A.
+
+## Interface Preview
+
+### Agent Workspace
+
+![Paper2Repo desktop agent workspace](docs/assets/paper2repo-home.png)
+
+### Report and Reproduction View
+
+![Paper2Repo report and reproduction workspace](docs/assets/paper2repo-report.png)
 
 ## What It Does
 
