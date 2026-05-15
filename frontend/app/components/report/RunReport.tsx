@@ -76,7 +76,7 @@ export default function RunReport({ runId }: { runId: string }) {
   }, [runId, language]);
 
   return (
-    <main className="stack">
+    <main className="stack report-page">
       <section className="page-heading">
         <div>
           <h1>{report?.title || text(language, "detailsTitle")}</h1>
@@ -84,67 +84,96 @@ export default function RunReport({ runId }: { runId: string }) {
         </div>
       </section>
 
-      <section className="panel stack">
-        <div className="grid">
-          <InfoBlock title={text(language, "taskStatus")} value={run ? formatRunStatusWithProgress(run, language) : text(language, "reportLoading")} />
-          <InfoBlock title={text(language, "analysisModel")} value={run?.model_name || text(language, "notRecorded")} />
-        </div>
-        <p className="muted">{message}</p>
-      </section>
+      <section className="report-shell">
+        <aside className="report-sidebar stack">
+          <section className="panel stack">
+            <h2>{text(language, "taskOverview")}</h2>
+            <InfoBlock title={text(language, "taskStatus")} value={run ? formatRunStatusWithProgress(run, language) : text(language, "reportLoading")} />
+            <InfoBlock title={text(language, "analysisModel")} value={run?.model_name || text(language, "notRecorded")} />
+            <p className="muted">{message}</p>
+          </section>
+          {run ? <WorkflowProgress run={run} /> : null}
+        </aside>
 
-      {run ? <WorkflowProgress run={run} /> : null}
+        <section className="report-main stack">
+          <nav className="report-tabs" aria-label={text(language, "reportNavigation")}>
+            <a href="#markdown-report">{text(language, "reportTab")}</a>
+            <a href="#reproduction-tools">{text(language, "reproductionTab")}</a>
+            <a href="#evidence-chain">{text(language, "evidenceTab")}</a>
+            <a href="#export-actions">{text(language, "exportTab")}</a>
+          </nav>
 
-      {report ? (
-        <section
-          className={`report-viewer ${fullscreen ? "report-fullscreen" : ""}`}
-          id="markdown-report"
-        >
-          {fullscreen ? (
-            <div className="report-fullscreen-toggle">
-              <button className="button secondary" type="button" onClick={() => setFullscreen(false)}>
-                {text(language, "exitFullscreen")}
-              </button>
-            </div>
-          ) : null}
-          <div className="report-header">
-            <div>
-              <h2>{text(language, "markdownReport")}</h2>
-              <p className="muted">{text(language, "reportViewHint")}</p>
-            </div>
-            <div className="action-row">
-              {!fullscreen ? (
-                <button className="button" type="button" onClick={() => setFullscreen(true)}>
-                  {text(language, "fullscreen")}
-                </button>
+          {report ? (
+            <section
+              className={`report-viewer panel ${fullscreen ? "report-fullscreen" : ""}`}
+              id="markdown-report"
+            >
+              {fullscreen ? (
+                <div className="report-fullscreen-toggle">
+                  <button className="button secondary" type="button" onClick={() => setFullscreen(false)}>
+                    {text(language, "exitFullscreen")}
+                  </button>
+                </div>
               ) : null}
-              <a className="button secondary" href={getReportMarkdownUrl(runId)} download>
-                {text(language, "downloadMarkdown")}
-              </a>
-              <a className="button secondary" href={getReportPdfUrl(runId)} download>
-                {text(language, "downloadPdf")}
-              </a>
-              <a className="button secondary" href={getReportHtmlUrl(runId)} download>
-                {text(language, "downloadHtml")}
-              </a>
-              <a className="button secondary" href={getReportLatexUrl(runId)} download>
-                {text(language, "downloadLatex")}
-              </a>
-              <a className="button secondary" href={getSkeletonUrl(runId)} download>
-                {text(language, "downloadSkeleton")}
-              </a>
-            </div>
+              <div className="report-header">
+                <div>
+                  <h2>{text(language, "markdownReport")}</h2>
+                  <p className="muted">{text(language, "reportViewHint")}</p>
+                </div>
+                {!fullscreen ? (
+                  <button className="button secondary" type="button" onClick={() => setFullscreen(true)}>
+                    {text(language, "fullscreen")}
+                  </button>
+                ) : null}
+              </div>
+              <article className="markdown-body">
+                <ReactMarkdown>{report.content}</ReactMarkdown>
+              </article>
+            </section>
+          ) : null}
+
+          {report ? (
+            <section className="panel stack report-export-panel" id="export-actions">
+              <div className="section-header">
+                <div>
+                  <h2>{text(language, "exportFiles")}</h2>
+                  <p className="muted">{text(language, "downloadSkeletonDesc")}</p>
+                </div>
+              </div>
+              <div className="action-row">
+                <a className="button secondary" href={getReportMarkdownUrl(runId)} download>
+                  {text(language, "downloadMarkdown")}
+                </a>
+                <a className="button secondary" href={getReportPdfUrl(runId)} download>
+                  {text(language, "downloadPdf")}
+                </a>
+                <a className="button secondary" href={getReportHtmlUrl(runId)} download>
+                  {text(language, "downloadHtml")}
+                </a>
+                <a className="button secondary" href={getReportLatexUrl(runId)} download>
+                  {text(language, "downloadLatex")}
+                </a>
+                <a className="button secondary" href={getSkeletonUrl(runId)} download>
+                  {text(language, "downloadSkeleton")}
+                </a>
+              </div>
+            </section>
+          ) : null}
+
+          <div id="reproduction-tools" className="report-section-anchor">
+            {report ? (
+              <>
+                <PwcLinks runId={runId} />
+                <QaPanel runId={runId} />
+              </>
+            ) : null}
           </div>
-          <article className="markdown-body">
-            <ReactMarkdown>{report.content}</ReactMarkdown>
-          </article>
+
+          <div id="evidence-chain" className="report-section-anchor">
+            {report ? <CitationNetwork runId={runId} /> : null}
+          </div>
         </section>
-      ) : null}
-
-      {report ? <PwcLinks runId={runId} /> : null}
-
-      {report ? <QaPanel runId={runId} /> : null}
-
-      {report ? <CitationNetwork runId={runId} /> : null}
+      </section>
     </main>
   );
 }

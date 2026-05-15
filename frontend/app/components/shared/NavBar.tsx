@@ -25,9 +25,9 @@ const themeCycle: Record<ThemeMode, ThemeMode> = {
 };
 
 const themeIcon: Record<ThemeMode, string> = {
-  light: "☀",
-  dark: "☾",
-  system: "⚙",
+  light: "L",
+  dark: "D",
+  system: "S",
 };
 
 export default function NavBar() {
@@ -46,44 +46,36 @@ export default function NavBar() {
   }, [theme]);
 
   return (
-    <nav className="nav-bar">
-      <Link href="/" className="nav-brand">
-        <span className="nav-brand-icon">P</span>
-        Paper2Repo
-      </Link>
-      <ul className="nav-links">
-        {links.map((link) => {
-          const isActive = link.href === "/" ? pathname === "/" : pathname.startsWith(link.href);
-          return (
-            <li key={link.href}>
-              <Link href={link.href} className={isActive ? "active" : ""}>
-                {text(language, link.labelKey)}
-              </Link>
-            </li>
-          );
-        })}
-        <li>
-          <button
-            type="button"
-            onClick={toggleTheme}
-            className="nav-theme-toggle"
-            title={text(language, `theme${theme.charAt(0).toUpperCase() + theme.slice(1)}` as "themeLight" | "themeDark" | "themeSystem")}
-            style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              fontSize: "18px",
-              padding: "6px 8px",
-              borderRadius: "var(--radius-sm)",
-              color: "var(--muted)",
-              lineHeight: 1,
-              transition: "color 150ms var(--ease), background 150ms var(--ease)",
-            }}
-          >
-            {themeIcon[theme]}
-          </button>
-        </li>
-      </ul>
-    </nav>
+    <aside className="nav-bar">
+      <div className="nav-top">
+        <Link href="/" className="nav-brand">
+          <img className="nav-brand-icon" src="/logo.svg" alt="" aria-hidden="true" />
+          <span>Paper2Repo</span>
+        </Link>
+        <ul className="nav-links">
+          {links.map((link) => {
+            const isActive = link.href === "/" ? pathname === "/" : pathname.startsWith(link.href);
+            return (
+              <li key={link.href}>
+                <Link href={link.href} className={isActive ? "active" : ""}>
+                  {text(language, link.labelKey)}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+      <button
+        type="button"
+        onClick={toggleTheme}
+        className="nav-theme-toggle"
+        title={text(language, `theme${theme.charAt(0).toUpperCase() + theme.slice(1)}` as "themeLight" | "themeDark" | "themeSystem")}
+      >
+        <span className="nav-theme-mark">{themeIcon[theme]}</span>
+        <span className="nav-theme-label">
+          {text(language, `theme${theme.charAt(0).toUpperCase() + theme.slice(1)}` as "themeLight" | "themeDark" | "themeSystem")}
+        </span>
+      </button>
+    </aside>
   );
 }

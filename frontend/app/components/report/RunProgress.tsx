@@ -12,7 +12,7 @@ export function WorkflowProgress({ run }: { run: Run }) {
     <section className="progress-panel">
       <div className="progress-header">
         <div>
-          <h3>{text(language, "progressTitle")}</h3>
+          <h3>{text(language, "workflowTimeline")}</h3>
           <p className="muted">
             {text(language, "currentStep")}：{formatStepLabel(run.current_step, language)}
           </p>
@@ -23,13 +23,16 @@ export function WorkflowProgress({ run }: { run: Run }) {
       <div className="progress-track" aria-label={text(language, "progressAria")}>
         <div className="progress-fill" style={{ width: `${progress}%` }} />
       </div>
-      <ol className="stepper">
+      <ol className="workflow-timeline">
         {WORKFLOW_STEPS.map((step, index) => {
           const state = stepStates[index];
           return (
             <li key={step.key} className={state === "pending" ? "" : state}>
               <span>{stepMarker(state, index)}</span>
-              <strong>{step.label[language]}</strong>
+              <div>
+                <strong>{step.label[language]}</strong>
+                <small>{stepStateLabel(state, language)}</small>
+              </div>
             </li>
           );
         })}
@@ -42,4 +45,11 @@ function stepMarker(state: string, index: number): string | number {
   if (state === "done") return "✓";
   if (state === "failed") return "!";
   return index + 1;
+}
+
+function stepStateLabel(state: string, language: "zh" | "en"): string {
+  if (state === "done") return language === "en" ? "Done" : "已完成";
+  if (state === "active") return language === "en" ? "Running" : "执行中";
+  if (state === "failed") return language === "en" ? "Failed" : "失败";
+  return language === "en" ? "Pending" : "等待";
 }

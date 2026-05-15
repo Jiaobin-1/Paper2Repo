@@ -37,7 +37,9 @@ export default function QaPanel({ runId }: { runId: string }) {
   }, [runId, language]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messages.length > 0) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
   }, [messages]);
 
   const handleSend = useCallback(async () => {

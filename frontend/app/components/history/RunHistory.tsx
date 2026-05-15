@@ -8,7 +8,7 @@ import { text } from "../../../lib/i18n";
 import { useAppLanguage } from "../../../lib/useAppLanguage";
 import type { RunListItem } from "../../../lib/types";
 
-export default function RunHistory() {
+export default function RunHistory({ compact = false }: { compact?: boolean }) {
   const language = useAppLanguage();
   const [runs, setRuns] = useState<RunListItem[]>([]);
   const [message, setMessage] = useState(text(language, "recentAnalysisLoading"));
@@ -69,10 +69,10 @@ export default function RunHistory() {
   }
 
   return (
-    <section className="panel stack">
+    <section className={`panel stack run-history${compact ? " run-history-compact" : ""}`}>
       <div className="section-header">
         <div>
-          <h2>{text(language, "recentAnalysis")}</h2>
+          <h2>{compact ? text(language, "taskQueue") : text(language, "recentAnalysis")}</h2>
           <p className="muted">{message}</p>
         </div>
         <button className="button secondary" type="button" onClick={() => void loadRuns()} disabled={isLoading}>
@@ -84,9 +84,12 @@ export default function RunHistory() {
         <div className="history-list">
           {runs.map((run) => (
             <article className="history-item" key={run.id}>
-              <div>
+              <div className="history-main">
                 <h3>{run.paper_title || run.paper_filename}</h3>
                 <p className="muted">{run.paper_filename}</p>
+                <div className="history-progress-track" aria-label={`${displayProgressPercent(run)}%`}>
+                  <span style={{ width: `${displayProgressPercent(run)}%` }} />
+                </div>
               </div>
               <div className="history-meta">
                 <StatusBadge status={run.status} language={language} />
@@ -95,7 +98,7 @@ export default function RunHistory() {
               </div>
               <div className="action-row">
                 <Link className="button secondary" href={`/runs/${run.id}`}>
-                  {run.status === "completed" ? text(language, "viewReport") : text(language, "viewReport")}
+                  {text(language, "viewReport")}
                 </Link>
                 <button
                   className="button danger"
