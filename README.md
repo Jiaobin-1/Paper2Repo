@@ -1,6 +1,6 @@
 # Paper2Repo
 
-Local-first agent workspace for turning research papers into evidence-grounded reproduction plans.
+Turn AI papers into evidence-grounded reports, experiment audits, reproduction plans, Q&A, and code skeletons.
 
 [![CI](https://github.com/Jiaobin-1/Paper2Repo/actions/workflows/ci.yml/badge.svg)](https://github.com/Jiaobin-1/Paper2Repo/actions/workflows/ci.yml)
 ![Release](https://img.shields.io/github/v/release/Jiaobin-1/Paper2Repo?include_prereleases)
@@ -8,9 +8,17 @@ Local-first agent workspace for turning research papers into evidence-grounded r
 ![Next.js](https://img.shields.io/badge/Next.js-16-000000)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-Paper2Repo reads AI papers as a reproducibility workflow, not just a summary task. Upload a PDF or import an arXiv paper, run the LangGraph workflow, and get a structured report that connects paper understanding, method and experiment breakdown, evidence references, risks, and a minimal code skeleton plan.
+## 中文简介
 
-It works without an API key through deterministic local fallbacks. With `OPENAI_API_KEY`, the same workflow uses an OpenAI-compatible chat API for richer analysis and Q&A.
+Paper2Repo 是我在学习 AI Agent 工作流时做的本地优先开源项目。它不是简单的论文总结器，而是把 AI 论文拆成一条更接近真实复现的流程：**读懂论文 -> 审计方法和实验 -> 规划复现**。
+
+输入 PDF 或 arXiv 论文后，它会生成结构化理解报告、实验细节审计、缺失信息提示、复现风险清单、checklist 和最小代码骨架计划。开发过程中，我使用 Codex 辅助实现、调试和整理文档。
+
+## Highlights
+
+- **Reproduction-first:** built for paper understanding, method audit, experiment audit, and reproduction planning, not generic summarization.
+- **Local-first:** FastAPI + Next.js + LangGraph + SQLite, with Docker Compose for quick local trials.
+- **No API key required:** deterministic fallbacks work out of the box; `OPENAI_API_KEY` enables richer model-assisted analysis and Q&A.
 
 ## Quick Start
 
