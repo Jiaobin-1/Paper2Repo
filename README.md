@@ -14,7 +14,7 @@ Paper2Repo reads papers with reproduction in mind. Upload a PDF or import an arX
 
 - **Reproduction-first:** built for paper understanding, method audit, experiment audit, and reproduction planning, not generic summarization.
 - **Local-first:** FastAPI + Next.js + LangGraph + SQLite, with Docker Compose for quick local trials.
-- **No API key required:** deterministic fallbacks work out of the box; `OPENAI_API_KEY` enables richer model-assisted analysis and Q&A.
+- **Agent workflow:** LangGraph coordinates parsing, evidence extraction, structured analysis, report generation, and Q&A.
 
 ## Quick Start
 
@@ -27,7 +27,7 @@ docker compose up --build
 
 Open `http://localhost:3000`.
 
-The Docker setup starts the FastAPI backend, Next.js frontend, and local SQLite storage. Leaving `OPENAI_API_KEY` empty is supported: the app still parses PDFs, runs deterministic evidence-based fallbacks, generates reports, and passes integration tests.
+The Docker setup starts the FastAPI backend, Next.js frontend, and local SQLite storage.
 
 ### Manual Development
 
@@ -99,15 +99,13 @@ PDF / arXiv
 
 | Variable | Description | Default |
 | --- | --- | --- |
-| `OPENAI_API_KEY` | Optional OpenAI-compatible API key | empty |
+| `OPENAI_API_KEY` | OpenAI-compatible API key for model-assisted analysis | not set |
 | `OPENAI_BASE_URL` | Chat API base URL | `https://api.openai.com/v1` |
 | `OPENAI_MODEL` | Default model for new runs | `gpt-4o-mini` |
 | `OPENAI_MODEL_OPTIONS` | Comma-separated model options | `gpt-4o-mini,gpt-4o,deepseek-chat` |
 | `OPENAI_TIMEOUT_SECONDS` | LLM request timeout | `60` |
 | `DATABASE_URL` | SQLite database URL | `sqlite:///./data/paper2repo.db` |
 | `UPLOAD_MAX_MB` | Single upload size limit | `50` |
-
-Leaving `OPENAI_API_KEY` empty is supported. The app still parses PDFs, runs local evidence-based fallbacks, generates reports, and passes the integration tests.
 
 ## Project Structure
 

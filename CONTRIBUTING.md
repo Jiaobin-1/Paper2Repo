@@ -34,8 +34,6 @@ npm ci
 npm run dev
 ```
 
-`OPENAI_API_KEY` is optional. Without it, Paper2Repo still runs deterministic local fallbacks for parsing, evidence extraction, and report generation.
-
 ## Before Opening a Pull Request
 
 Run the checks that match your change:
@@ -58,13 +56,13 @@ If a check is unrelated or cannot run in your environment, mention that in the p
 ## Pull Request Guidelines
 
 - Keep changes focused and explain the user-facing effect.
-- Preserve the local-first workflow and the no-key fallback path.
+- Preserve the local-first workflow and model-assisted analysis path.
 - Avoid committing local files such as `.env`, SQLite databases, uploaded PDFs, generated reports, `.next`, Playwright reports, or caches.
 - Include screenshots or short clips for visible UI changes.
 - Add or update tests when changing backend contracts, workflow nodes, report generation, exports, or frontend data rendering.
 
 ## Issue Guidelines
 
-For bugs, include the input type, the failing step, expected behavior, actual behavior, logs if available, and whether `OPENAI_API_KEY` was set.
+For bugs, include the input type, the failing step, expected behavior, actual behavior, logs if available, and relevant model configuration.
 
 For feature requests, describe the research or reproduction workflow you want to support, not only the UI control you want added.
