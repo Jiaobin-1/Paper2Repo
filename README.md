@@ -3,6 +3,7 @@
 Local-first agent workspace for turning research papers into evidence-grounded reproduction plans.
 
 [![CI](https://github.com/Jiaobin-1/Paper2Repo/actions/workflows/ci.yml/badge.svg)](https://github.com/Jiaobin-1/Paper2Repo/actions/workflows/ci.yml)
+![Release](https://img.shields.io/github/v/release/Jiaobin-1/Paper2Repo?include_prereleases)
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB)
 ![Next.js](https://img.shields.io/badge/Next.js-16-000000)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -10,6 +11,45 @@ Local-first agent workspace for turning research papers into evidence-grounded r
 Paper2Repo reads AI papers as a reproducibility workflow, not just a summary task. Upload a PDF or import an arXiv paper, run the LangGraph workflow, and get a structured report that connects paper understanding, method and experiment breakdown, evidence references, risks, and a minimal code skeleton plan.
 
 It works without an API key through deterministic local fallbacks. With `OPENAI_API_KEY`, the same workflow uses an OpenAI-compatible chat API for richer analysis and Q&A.
+
+## Quick Start
+
+### Docker
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+Open `http://localhost:3000`.
+
+The Docker setup starts the FastAPI backend, Next.js frontend, and local SQLite storage. Leaving `OPENAI_API_KEY` empty is supported: the app still parses PDFs, runs deterministic evidence-based fallbacks, generates reports, and passes integration tests.
+
+### Manual Development
+
+Backend:
+
+```bash
+cp .env.example .env
+cd backend
+pip install -r requirements.txt
+pip install -r requirements-dev.txt
+python -m uvicorn app.main:app --reload
+```
+
+Frontend:
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+Health check:
+
+```bash
+curl http://127.0.0.1:8000/health
+```
 
 ## Interface Preview
 
@@ -30,6 +70,15 @@ It works without an API key through deterministic local fallbacks. With `OPENAI_
 | Reproduction planning | Minimum reproduction goal, scope, risks, checklist, code skeleton |
 | Local workspace features | Batch analysis, arXiv import, Q&A, citations, knowledge search, comparison |
 
+## Why Not Just Use a PDF Summarizer?
+
+| Tool type | Typical output | Paper2Repo output |
+| --- | --- | --- |
+| PDF chat | Answers to ad hoc questions | A persistent paper workspace with reports, Q&A, exports, and searchable evidence |
+| Paper summarizer | Background, method, contributions | Understanding plus method modules, experiment protocols, missing details, and limitations |
+| Agent notebook | Free-form analysis | A structured `read paper -> audit method and experiments -> plan reproduction` workflow |
+| Code generator | Draft code from a prompt | Reproduction scope, acceptance criteria, risks, and a minimal code skeleton with TODOs |
+
 ## Workflow
 
 ```text
@@ -40,34 +89,6 @@ PDF / arXiv
   -> analyze method and experiments
   -> plan reproduction
   -> export report and code skeleton
-```
-
-## Quick Start
-
-### Backend
-
-```bash
-cp .env.example .env
-cd backend
-pip install -r requirements.txt
-pip install -r requirements-dev.txt
-python -m uvicorn app.main:app --reload
-```
-
-### Frontend
-
-```bash
-cd frontend
-npm ci
-npm run dev
-```
-
-Open `http://localhost:3000`.
-
-Health check:
-
-```bash
-curl http://127.0.0.1:8000/health
 ```
 
 ## Configuration

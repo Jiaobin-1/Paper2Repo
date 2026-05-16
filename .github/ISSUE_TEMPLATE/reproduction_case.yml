@@ -1,0 +1,34 @@
+name: Reproduction case
+description: Share a paper that should become a stronger Paper2Repo case study or benchmark.
+title: "[Case]: "
+labels: ["case-study"]
+body:
+  - type: input
+    id: paper
+    attributes:
+      label: Paper link
+      placeholder: "arXiv, DOI, OpenReview, project page, or public PDF"
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why this paper matters
+      description: What makes it useful for testing paper understanding or reproduction planning?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected reproduction output
+      description: Mention datasets, metrics, baselines, risks, or code skeleton expectations.
+  - type: dropdown
+    id: permission
+    attributes:
+      label: Can the paper be used in public documentation?
+      options:
+        - "Yes, it is publicly available"
+        - "No, use only as a private test"
+        - "Not sure"
+    validations:
+      required: true

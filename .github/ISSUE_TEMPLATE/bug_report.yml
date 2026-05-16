@@ -1,0 +1,55 @@
+name: Bug report
+description: Report a reproducible Paper2Repo problem.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What went wrong?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Include the input type, page/API endpoint, and exact action sequence.
+      placeholder: |
+        1. Start with ...
+        2. Upload/import ...
+        3. Click/run ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include logs or screenshots if useful.
+    validations:
+      required: true
+  - type: dropdown
+    id: api_key
+    attributes:
+      label: Was OPENAI_API_KEY configured?
+      options:
+        - "No"
+        - "Yes"
+        - "Not sure"
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: "macOS 15, Docker Desktop, Python 3.12, Node 22"
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional context

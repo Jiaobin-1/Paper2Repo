@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use Paper2Repo in research, teaching, or reproducibility work, please cite it."
+title: "Paper2Repo: A local-first agent workspace for research paper reproduction planning"
+authors:
+  - name: "Jiaobin-1"
+repository-code: "https://github.com/Jiaobin-1/Paper2Repo"
+url: "https://github.com/Jiaobin-1/Paper2Repo"
+license: "MIT"
+version: "0.1.0"
+date-released: "2026-05-16"

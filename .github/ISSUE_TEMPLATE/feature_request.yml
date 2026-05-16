@@ -1,0 +1,45 @@
+name: Feature request
+description: Suggest an improvement to the paper understanding or reproduction workflow.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: workflow
+    attributes:
+      label: Workflow need
+      description: What research or reproduction workflow should Paper2Repo support better?
+    validations:
+      required: true
+  - type: textarea
+    id: current
+    attributes:
+      label: Current workaround
+      description: How do you handle this today?
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the expected output or user flow.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Paper parsing
+        - Report quality
+        - Reproduction planning
+        - Code skeleton
+        - Q&A or retrieval
+        - Export
+        - Frontend UX
+        - Developer experience
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: examples
+    attributes:
+      label: Example papers or outputs
+      description: Link public examples when possible.

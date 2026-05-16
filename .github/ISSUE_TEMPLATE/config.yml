@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: GitHub Discussions
+    url: https://github.com/Jiaobin-1/Paper2Repo/discussions
+    about: Ask usage questions or share ideas that are not ready for an issue.
