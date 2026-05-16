@@ -8,11 +8,7 @@ Turn AI papers into evidence-grounded reports, experiment audits, reproduction p
 ![Next.js](https://img.shields.io/badge/Next.js-16-000000)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-## 中文简介
-
-Paper2Repo 是我在学习 AI Agent 工作流时做的本地优先开源项目。它不是简单的论文总结器，而是把 AI 论文拆成一条更接近真实复现的流程：**读懂论文 -> 审计方法和实验 -> 规划复现**。
-
-输入 PDF 或 arXiv 论文后，它会生成结构化理解报告、实验细节审计、缺失信息提示、复现风险清单、checklist 和最小代码骨架计划。开发过程中，我使用 Codex 辅助实现、调试和整理文档。
+Paper2Repo reads papers with reproduction in mind. Upload a PDF or import an arXiv paper, then get a structured report that connects paper understanding, method and experiment details, missing reproduction information, risks, and a minimal code skeleton plan.
 
 ## Highlights
 
