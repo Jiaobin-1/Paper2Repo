@@ -62,11 +62,30 @@ export default function KnowledgeSearch() {
 
       {error ? <p className="qa-error">{error}</p> : null}
 
-      {searched && !loading && results.length === 0 && !error ? (
-        <p className="muted">{text(language, "knowledgeNoResults")}</p>
+      {loading ? (
+        <div className="loading-state">
+          <span className="spinner" />
+          <p>{text(language, "knowledgeLoading")}</p>
+        </div>
       ) : null}
 
-      {!searched && !loading ? <p className="muted">{text(language, "knowledgeEmpty")}</p> : null}
+      {searched && !loading && results.length === 0 && !error ? (
+        <div className="empty-state">
+          <svg className="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+          </svg>
+          <p>{text(language, "knowledgeNoResults")}</p>
+        </div>
+      ) : null}
+
+      {!searched && !loading ? (
+        <div className="empty-state">
+          <svg className="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+          </svg>
+          <p>{text(language, "knowledgeEmpty")}</p>
+        </div>
+      ) : null}
 
       {grouped.map((group) => (
         <div key={group.paperId} className="knowledge-group">

@@ -92,7 +92,14 @@ export default function RunReport({ runId }: { runId: string }) {
             <InfoBlock title={text(language, "analysisModel")} value={run?.model_name || text(language, "notRecorded")} />
             <p className="muted">{message}</p>
           </section>
-          {run ? <WorkflowProgress run={run} /> : null}
+          {run ? <WorkflowProgress run={run} /> : (
+            <section className="progress-panel">
+              <div className="loading-state" style={{ padding: "24px 0" }}>
+                <span className="spinner" />
+                <p>{text(language, "reportLoading")}</p>
+              </div>
+            </section>
+          )}
         </aside>
 
         <section className="report-main stack">
@@ -102,6 +109,22 @@ export default function RunReport({ runId }: { runId: string }) {
             <a href="#evidence-chain">{text(language, "evidenceTab")}</a>
             <a href="#export-actions">{text(language, "exportTab")}</a>
           </nav>
+
+          {!report && !run?.error_message ? (
+            <section className="panel">
+              <div className="loading-state">
+                <span className="spinner" />
+                <p>{message}</p>
+              </div>
+            </section>
+          ) : null}
+
+          {run?.error_message ? (
+            <section className="panel error-box">
+              <h3>{text(language, "taskError")}</h3>
+              <p>{run.error_message}</p>
+            </section>
+          ) : null}
 
           {report ? (
             <section

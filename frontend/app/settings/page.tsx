@@ -85,57 +85,68 @@ export default function SettingsPage() {
       </section>
 
       <section className="panel stack">
-        <label className="field-label" htmlFor="ui-language">
-          {text(language, "uiLanguage")}
-        </label>
-        <select id="ui-language" className="select" value={uiLanguage} onChange={(event) => setUiLanguage(event.target.value as LanguageCode)}>
-          <option value="zh">{text(language, "chinese")}</option>
-          <option value="en">{text(language, "english")}</option>
-        </select>
+        <h2>{text(language, "uiLanguage")}</h2>
+        <div className="settings-group">
+          <label className="field-label" htmlFor="ui-language">
+            {text(language, "uiLanguage")}
+          </label>
+          <select id="ui-language" className="select" value={uiLanguage} onChange={(event) => setUiLanguage(event.target.value as LanguageCode)}>
+            <option value="zh">{text(language, "chinese")}</option>
+            <option value="en">{text(language, "english")}</option>
+          </select>
+        </div>
 
-        <label className="field-label" htmlFor="report-language">
-          {text(language, "reportLanguage")}
-        </label>
-        <select id="report-language" className="select" value={reportLanguage} onChange={(event) => setReportLanguage(event.target.value as LanguageCode)}>
-          <option value="en">{text(language, "english")}</option>
-          <option value="zh">{text(language, "chinese")}</option>
-        </select>
+        <div className="settings-group">
+          <label className="field-label" htmlFor="report-language">
+            {text(language, "reportLanguage")}
+          </label>
+          <select id="report-language" className="select" value={reportLanguage} onChange={(event) => setReportLanguage(event.target.value as LanguageCode)}>
+            <option value="en">{text(language, "english")}</option>
+            <option value="zh">{text(language, "chinese")}</option>
+          </select>
+        </div>
 
-        <label className="field-label" htmlFor="theme-mode">
-          {text(language, "themeMode")}
-        </label>
-        <select id="theme-mode" className="select" value={theme} onChange={(event) => setTheme(event.target.value as ThemeMode)}>
-          <option value="light">{text(language, "themeLight")}</option>
-          <option value="dark">{text(language, "themeDark")}</option>
-          <option value="system">{text(language, "themeSystem")}</option>
-        </select>
+        <div className="settings-group">
+          <label className="field-label" htmlFor="theme-mode">
+            {text(language, "themeMode")}
+          </label>
+          <select id="theme-mode" className="select" value={theme} onChange={(event) => setTheme(event.target.value as ThemeMode)}>
+            <option value="light">{text(language, "themeLight")}</option>
+            <option value="dark">{text(language, "themeDark")}</option>
+            <option value="system">{text(language, "themeSystem")}</option>
+          </select>
+        </div>
 
-        <label className="field-label" htmlFor="default-model">
-          {text(language, "defaultModel")}
-        </label>
-        <select
-          id="default-model"
-          className="select"
-          value={defaultModel}
-          disabled={!settings}
-          onChange={(event) => setDefaultModel(event.target.value)}
-        >
-          {settings ? (
-            settings.available_models.map((model) => (
-              <option key={model} value={model}>
-                {model}
-              </option>
-            ))
-          ) : (
-            <option value="">{text(language, "loadingModelConfig")}</option>
-          )}
-        </select>
+        <hr className="divider" />
 
-        <p className="muted">
-          {settings
-            ? `${settings.configured ? text(language, "modelConfigured") : text(language, "modelNotConfigured")} · ${settings.base_url} · ${text(language, "modelTimeoutSetting")} ${settings.timeout_seconds}s`
-            : text(language, "loadingModelConfig")}
-        </p>
+        <h2>{text(language, "defaultModel")}</h2>
+        <div className="settings-group">
+          <label className="field-label" htmlFor="default-model">
+            {text(language, "defaultModel")}
+          </label>
+          <select
+            id="default-model"
+            className="select"
+            value={defaultModel}
+            disabled={!settings}
+            onChange={(event) => setDefaultModel(event.target.value)}
+          >
+            {settings ? (
+              settings.available_models.map((model) => (
+                <option key={model} value={model}>
+                  {model}
+                </option>
+              ))
+            ) : (
+              <option value="">{text(language, "loadingModelConfig")}</option>
+            )}
+          </select>
+          <p className="muted" style={{ marginTop: 4, fontSize: 13 }}>
+            {settings
+              ? `${settings.configured ? text(language, "modelConfigured") : text(language, "modelNotConfigured")} · ${settings.base_url} · ${text(language, "modelTimeoutSetting")} ${settings.timeout_seconds}s`
+              : text(language, "loadingModelConfig")}
+          </p>
+        </div>
 
         <div className="action-row">
           <button className="button" type="button" disabled={!settings || isSaving} onClick={handleSave}>

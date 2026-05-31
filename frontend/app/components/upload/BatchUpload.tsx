@@ -6,6 +6,7 @@ import {
   startBatchAnalysis,
   uploadPapers,
 } from "../../../lib/api";
+import { formatFileSize } from "../../../lib/format";
 import { formatRunStatusWithProgress } from "../../../lib/runPresentation";
 import { pollRunUntilTerminal } from "../../../lib/runPolling";
 import { text } from "../../../lib/i18n";
@@ -276,7 +277,7 @@ export default function BatchUpload() {
               <div key={`${item.file.name}-${index}`} className="batch-item">
                 <div className="batch-item-info">
                   <span className="batch-item-name">{item.file.name}</span>
-                  <span className="batch-item-size">{formatSize(item.file.size)}</span>
+                  <span className="batch-item-size">{formatFileSize(item.file.size)}</span>
                 </div>
                 <div className="batch-item-status">
                   <span className={`batch-badge ${item.status}`}>{batchStatusLabel(item.status, language)}</span>
@@ -311,12 +312,6 @@ export default function BatchUpload() {
   );
 }
 
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  const kb = bytes / 1024;
-  if (kb < 1024) return `${kb.toFixed(1)} KB`;
-  return `${(kb / 1024).toFixed(1)} MB`;
-}
 
 function batchStatusLabel(status: BatchStatus, language: LanguageCode): string {
   const labels: Record<LanguageCode, Record<BatchStatus, string>> = {

@@ -80,7 +80,7 @@ export default function ArxivPage() {
       </section>
 
       <section className="panel stack">
-        <div className="knowledge-search-row">
+        <div className="arxiv-input-row">
           <input
             className="input"
             placeholder={text(language, "arxivPlaceholder")}

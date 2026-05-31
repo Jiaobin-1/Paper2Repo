@@ -53,7 +53,18 @@ export default function ComparePage() {
   if (!loaded) {
     return (
       <main className="stack">
-        <p className="muted">{text(language, "compareLoading")}</p>
+        <section className="page-heading">
+          <div>
+            <h1>{text(language, "compareTitle")}</h1>
+            <p className="muted">{text(language, "compareSubtitle")}</p>
+          </div>
+        </section>
+        <section className="panel">
+          <div className="loading-state">
+            <span className="spinner" />
+            <p>{text(language, "compareLoading")}</p>
+          </div>
+        </section>
       </main>
     );
   }

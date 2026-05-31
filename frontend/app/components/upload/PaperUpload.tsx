@@ -15,6 +15,7 @@ import {
 } from "../../../lib/api";
 import { formatProgressMessage, formatRunStatusWithProgress } from "../../../lib/runPresentation";
 import { pollRunUntilTerminal } from "../../../lib/runPolling";
+import { formatFileSize } from "../../../lib/format";
 import { text } from "../../../lib/i18n";
 import { SETTINGS_UPDATED_EVENT, useAppLanguage } from "../../../lib/useAppLanguage";
 import type { AppSettings, Paper, Report, Run } from "../../../lib/types";
@@ -311,13 +312,6 @@ export default function PaperUpload() {
       ) : null}
     </div>
   );
-}
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  const kb = bytes / 1024;
-  if (kb < 1024) return `${kb.toFixed(1)} KB`;
-  return `${(kb / 1024).toFixed(1)} MB`;
 }
 
 function isPdfFile(file: File): boolean {

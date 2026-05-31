@@ -24,7 +24,10 @@ export default function HomePage() {
           <p className="muted">{text(language, "appSubtitle")}</p>
         </div>
         <div className="home-actions">
-          <Link className="button" href="/batch">
+          <Link className="button secondary" href="/arxiv">
+            {text(language, "arxivImport")}
+          </Link>
+          <Link className="button secondary" href="/batch">
             {text(language, "batchAnalysis")}
           </Link>
           <Link className="button secondary" href="/knowledge">
@@ -33,8 +36,17 @@ export default function HomePage() {
         </div>
       </section>
 
+      <section className="workflow-strip" aria-label="Paper2Repo workflow">
+        {workflowSteps.map((label, index) => (
+          <span key={label}>
+            <b>{String(index + 1).padStart(2, "0")}</b>
+            {label}
+          </span>
+        ))}
+      </section>
+
       <section className="home-workbench">
-        <section className="panel stack upload-panel">
+        <section className="panel stack upload-panel fade-in">
           <div className="section-header section-header-compact">
             <div>
               <h2>{text(language, "localWorkflow")}</h2>
@@ -42,21 +54,7 @@ export default function HomePage() {
           </div>
           <PaperUpload />
         </section>
-        <aside className="home-rail stack">
-          <section className="panel stack">
-            <div>
-              <h2>{text(language, "workflowTimeline")}</h2>
-              <p className="muted">{text(language, "workflowTimelineHint")}</p>
-            </div>
-            <div className="workflow-strip workflow-strip-rail" aria-label="Paper2Repo workflow">
-              {workflowSteps.map((label, index) => (
-                <span key={label}>
-                  <b>{String(index + 1).padStart(2, "0")}</b>
-                  {label}
-                </span>
-              ))}
-            </div>
-          </section>
+        <aside className="home-rail stack slide-up">
           <RunHistory compact />
         </aside>
       </section>
