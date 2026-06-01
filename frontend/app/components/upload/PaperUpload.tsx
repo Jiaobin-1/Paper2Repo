@@ -252,7 +252,7 @@ export default function PaperUpload() {
         </button>
       </div>
 
-      <p className="muted upload-message">{message}</p>
+      <p className="muted upload-message" aria-live="polite">{message}</p>
 
       <div className="grid">
         <InfoBlock title={text(language, "taskStatus")} value={formatRunStatusWithProgress(run, language)} />
@@ -274,7 +274,7 @@ export default function PaperUpload() {
       ) : null}
 
       {run?.error_message ? (
-        <section className="error-box">
+        <section className="error-box" role="alert">
           <h3>{text(language, "taskError")}</h3>
           <p>{run.error_message}</p>
         </section>

@@ -145,7 +145,7 @@ export default function QaPanel({ runId }: { runId: string }) {
         <p className="muted">{text(language, "qaEmpty")}</p>
       ) : null}
 
-      <div className="qa-messages">
+      <div className="qa-messages" aria-live="polite" aria-busy={loading}>
         {messages.map((msg) => (
           <div key={msg.id} className={`qa-message qa-message-${msg.role}`}>
             <div className="qa-message-role">{msg.role === "user" ? "You" : "AI"}</div>

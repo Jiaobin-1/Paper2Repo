@@ -123,7 +123,6 @@ def retrieve_context(
                 idx = r.metadata.chunk_index
                 if idx < len(emb_scores):
                     r.score = r.score * 0.4 + emb_scores[idx] * 0.6
-            results.sort(key=lambda item: (-item.score, item.metadata.page_start, item.metadata.chunk_index))
         except Exception:
             pass
 
@@ -164,21 +163,22 @@ def search_knowledge_base(query: str, top_k: int = 10) -> list[RetrievedChunk]:
         return []
 
     model = _get_embedding_model()
-    query_emb = model.encode([query])
+    query_emb = np.asarray(model.encode([query]), dtype="float32").flatten()
+    query_norm = float(np.linalg.norm(query_emb))
 
-    results: list[tuple[float, dict]] = []
-    for row in rows:
-        chunk_emb = np.frombuffer(row["embedding"], dtype="float32")
-        sim = float(np.dot(chunk_emb, query_emb.flatten()))
-        norm = float(np.linalg.norm(chunk_emb) * np.linalg.norm(query_emb))
-        score = sim / max(norm, 1e-8)
-        results.append((score, row))
+    # Stack all stored embeddings into one matrix and score them in a single
+    # vectorized pass instead of a per-row Python loop.
+    chunk_matrix = np.stack([np.frombuffer(row["embedding"], dtype="float32") for row in rows])
+    sims = chunk_matrix @ query_emb
+    norms = np.linalg.norm(chunk_matrix, axis=1) * query_norm
+    scores = sims / np.maximum(norms, 1e-8)
 
-    results.sort(key=lambda x: -x[0])
-    top = results[:top_k]
+    order = np.argsort(-scores)[:top_k]
 
     output: list[RetrievedChunk] = []
-    for score, row in top:
+    for i in order:
+        row = rows[int(i)]
+        score = float(scores[int(i)])
         meta = ChunkMetadata(
             chunk_index=row["chunk_index"],
             page_start=row["page_start"],

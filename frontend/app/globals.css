@@ -2088,3 +2088,42 @@ pre {
     position: static;
   }
 }
+
+/* ============================================================
+   Accessibility
+   ============================================================ */
+
+/* Consistent keyboard focus ring for all interactive elements.
+   Uses :focus-visible so mouse/touch users never see the ring,
+   while keyboard users get a clear, on-brand indicator. */
+a:focus-visible,
+button:focus-visible,
+.button:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:focus-visible,
+summary:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-glow);
+  border-radius: var(--radius-sm);
+}
+
+.input:focus-visible,
+.select:focus-visible,
+.qa-input:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-ring);
+}
+
+/* Respect users who prefer reduced motion: neutralize the spring,
+   fade, slide, and spinner animations and collapse transitions. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

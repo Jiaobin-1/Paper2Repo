@@ -8,19 +8,29 @@ export function WorkflowProgress({ run }: { run: Run }) {
   const progress = displayProgressPercent(run);
   const stepStates = getStepStates(run);
 
+  const isRunning = run.status === "running" || run.status === "pending";
+
   return (
-    <section className="progress-panel">
+    <section className="progress-panel" aria-busy={isRunning}>
       <div className="progress-header">
         <div>
           <h3>{text(language, "workflowTimeline")}</h3>
-          <p className="muted">
+          <p className="muted" aria-live="polite">
             {text(language, "currentStep")}：{formatStepLabel(run.current_step, language)}
           </p>
           <p className="muted">{formatRunTiming(run, language)}</p>
         </div>
         <strong>{progress}%</strong>
       </div>
-      <div className="progress-track" aria-label={text(language, "progressAria")}>
+      <div
+        className="progress-track"
+        role="progressbar"
+        aria-label={text(language, "progressAria")}
+        aria-valuenow={progress}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuetext={`${progress}%`}
+      >
         <div className="progress-fill" style={{ width: `${progress}%` }} />
       </div>
       <ol className="workflow-timeline">
