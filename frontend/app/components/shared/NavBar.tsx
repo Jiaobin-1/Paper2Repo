@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback } from "react";
 import { updateAppSettings } from "../../../lib/api";
+import { logError } from "../../../lib/logError";
 import { text } from "../../../lib/i18n";
 import { SETTINGS_UPDATED_EVENT, useAppLanguage } from "../../../lib/useAppLanguage";
 import { useTheme } from "../../../lib/useTheme";
@@ -57,8 +58,8 @@ export default function NavBar() {
     try {
       await updateAppSettings({ theme: next });
       window.dispatchEvent(new Event(SETTINGS_UPDATED_EVENT));
-    } catch {
-      // ignore
+    } catch (error) {
+      logError("Failed to update theme", error);
     }
   }, [theme]);
 

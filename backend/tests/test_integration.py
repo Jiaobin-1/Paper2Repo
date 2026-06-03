@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,18 @@ SAMPLE_PDF = FIXTURES / "sample.pdf"
 
 def _client():
     return TestClient(create_app())
+
+
+def _wait_for_terminal(client, run_id, timeout=30.0):
+    """Analysis runs on a background thread pool; poll until it settles."""
+    deadline = time.monotonic() + timeout
+    response = client.get(f"/api/runs/{run_id}")
+    while time.monotonic() < deadline:
+        if response.status_code == 200 and response.json()["status"] in {"completed", "failed"}:
+            return response
+        time.sleep(0.05)
+        response = client.get(f"/api/runs/{run_id}")
+    return response
 
 
 pytestmark = pytest.mark.skipif(
@@ -45,7 +58,7 @@ class TestFullPipeline:
             assert run_resp.status_code == 200
             run_id = run_resp.json()["id"]
 
-            detail_resp = client.get(f"/api/runs/{run_id}")
+            detail_resp = _wait_for_terminal(client, run_id)
             assert detail_resp.status_code == 200
             assert detail_resp.json()["status"] == "completed"
 

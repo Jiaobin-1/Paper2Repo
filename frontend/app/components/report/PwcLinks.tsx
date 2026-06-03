@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getPwcLinks } from "../../../lib/api";
+import { logError } from "../../../lib/logError";
 import { text } from "../../../lib/i18n";
 import { useAppLanguage } from "../../../lib/useAppLanguage";
 import type { PwcLink } from "../../../lib/types";
@@ -24,7 +25,8 @@ export default function PwcLinks({ runId }: { runId: string }) {
         setLinks(data);
         setLoaded(true);
       })
-      .catch(() => {
+      .catch((error) => {
+        logError("Failed to load Papers With Code links", error);
         setLoaded(true);
       });
   }, [runId]);

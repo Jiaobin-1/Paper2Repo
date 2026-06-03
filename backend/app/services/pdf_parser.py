@@ -26,11 +26,17 @@ def _find_section_candidates(page_number: int, text: str) -> list[SectionCandida
     return candidates
 
 
-def parse_pdf(pdf_path: str | Path) -> ParsedPaper:
+def parse_pdf(pdf_path: str | Path, max_pages: int | None = None) -> ParsedPaper:
     try:
         import fitz
     except ImportError as exc:
         raise RuntimeError("PyMuPDF is required. Install backend/requirements.txt first.") from exc
+
+    if max_pages is None:
+        from app.core.config import get_settings
+
+        max_pages = get_settings().pdf_max_pages
+    page_cap = max(1, max_pages)
 
     path = Path(pdf_path)
     if not path.exists():
@@ -43,6 +49,9 @@ def parse_pdf(pdf_path: str | Path) -> ParsedPaper:
     try:
         with fitz.open(path) as document:
             for index, page in enumerate(document, start=1):
+                # Cap work so a pathologically large PDF can't tie up a worker.
+                if index > page_cap:
+                    break
                 text = page.get_text("text").strip()
                 page_texts.append(PageText(page_number=index, text=text))
                 raw_parts.append(text)

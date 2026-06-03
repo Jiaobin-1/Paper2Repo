@@ -36,7 +36,24 @@ router = APIRouter(
 )
 PDF_SIGNATURE = b"%PDF-"
 UPLOAD_CHUNK_SIZE = 1024 * 1024
-_recovery_executor: ThreadPoolExecutor | None = None
+_analysis_executor: ThreadPoolExecutor | None = None
+
+
+def _get_analysis_executor() -> ThreadPoolExecutor:
+    """Single bounded pool for all single-run analysis work.
+
+    Keeps heavy LLM/embedding jobs off the request-handling threadpool and caps
+    concurrency at ANALYSIS_MAX_WORKERS so a burst of uploads cannot starve the
+    API. Batch analysis keeps its own transient pool.
+    """
+    global _analysis_executor
+    if _analysis_executor is None:
+        max_workers = max(1, get_settings().analysis_max_workers)
+        _analysis_executor = ThreadPoolExecutor(
+            max_workers=max_workers,
+            thread_name_prefix="analysis",
+        )
+    return _analysis_executor
 
 
 def run_analysis_background(paper_id: str, run_id: str, pdf_path: str, model_name: str | None) -> None:
@@ -106,20 +123,17 @@ def run_analysis_background(paper_id: str, run_id: str, pdf_path: str, model_nam
 
 
 def start_recoverable_analysis_jobs() -> None:
-    global _recovery_executor
     jobs = list_recoverable_analysis_jobs()
     if not jobs:
         return
-    settings = get_settings()
-    if _recovery_executor is None:
-        _recovery_executor = ThreadPoolExecutor(max_workers=max(1, settings.analysis_max_workers))
+    executor = _get_analysis_executor()
     for job in jobs:
         paper = get_paper(job["paper_id"])
         run = get_run(job["run_id"])
         if not paper:
             fail_analysis_job(job["run_id"], "Paper record was not found during recovery.")
             continue
-        _recovery_executor.submit(
+        executor.submit(
             run_analysis_background,
             job["paper_id"],
             job["run_id"],
@@ -233,14 +247,16 @@ def get_paper_runs(paper_id: str) -> list[RunListItemResponse]:
     summary="Start analysis",
     description="Start a new analysis run for the paper. The analysis runs in the background.",
 )
-def start_run(paper_id: str, background_tasks: BackgroundTasks) -> RunResponse:
+def start_run(paper_id: str) -> RunResponse:
     paper = get_paper(paper_id)
     if not paper:
         raise HTTPException(status_code=404, detail="Paper not found.")
 
     run = create_run(paper_id)
     create_analysis_job(run["id"], paper_id)
-    background_tasks.add_task(run_analysis_background, paper_id, run["id"], paper["file_path"], run.get("model_name"))
+    _get_analysis_executor().submit(
+        run_analysis_background, paper_id, run["id"], paper["file_path"], run.get("model_name")
+    )
     return RunResponse(**run)
 
 

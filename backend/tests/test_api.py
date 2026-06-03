@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 from fastapi.testclient import TestClient
 
 from app.main import create_app
@@ -7,6 +9,18 @@ from app.main import create_app
 
 def _client():
     return TestClient(create_app())
+
+
+def _wait_for_terminal(client, run_id, timeout=5.0):
+    """Analysis now runs on a background thread pool; poll until it settles."""
+    deadline = time.monotonic() + timeout
+    response = client.get(f"/api/runs/{run_id}")
+    while time.monotonic() < deadline:
+        if response.status_code == 200 and response.json()["status"] in {"completed", "failed"}:
+            return response
+        time.sleep(0.02)
+        response = client.get(f"/api/runs/{run_id}")
+    return response
 
 
 def test_upload_rejects_non_pdf_extension(isolated_settings):
@@ -67,7 +81,7 @@ def test_upload_accepts_valid_pdf_and_start_run_success(isolated_settings, monke
         created_run = run_response.json()
         assert created_run["updated_at"]
 
-        detail_response = client.get(f"/api/runs/{created_run['id']}")
+        detail_response = _wait_for_terminal(client, created_run["id"])
 
     run = detail_response.json()
     assert detail_response.status_code == 200
@@ -93,6 +107,7 @@ def test_delete_completed_run_removes_it_from_api(isolated_settings, monkeypatch
         paper = upload_response.json()
         run_response = client.post(f"/api/papers/{paper['id']}/runs")
         run_id = run_response.json()["id"]
+        _wait_for_terminal(client, run_id)
 
         delete_response = client.delete(f"/api/runs/{run_id}")
         detail_response = client.get(f"/api/runs/{run_id}")

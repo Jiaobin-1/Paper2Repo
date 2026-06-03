@@ -83,6 +83,7 @@ export default function ArxivPage() {
         <div className="arxiv-input-row">
           <input
             className="input"
+            aria-label={text(language, "arxivImport")}
             placeholder={text(language, "arxivPlaceholder")}
             value={input}
             onChange={(e) => setInput(e.target.value)}

@@ -2,12 +2,19 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 from app.core.config import get_settings
+
+# One SQLite connection per thread, reused across calls. Opening a connection
+# and re-running the WAL/busy_timeout PRAGMAs on every query is wasteful, and the
+# previous `with get_connection()` pattern never closed connections (a `with` on
+# a sqlite3.Connection only commits the transaction), so they accumulated.
+_local = threading.local()
 
 DEFAULT_MODEL_SETTING_KEY = "default_model"
 UI_LANGUAGE_SETTING_KEY = "ui_language"
@@ -27,12 +34,21 @@ def _json(value: Any) -> str:
 
 
 def get_connection() -> sqlite3.Connection:
-    settings = get_settings()
-    settings.database_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(settings.database_path, timeout=10)
+    db_path = get_settings().database_path
+    cached: sqlite3.Connection | None = getattr(_local, "conn", None)
+    # Reuse the thread's connection unless the configured DB path changed
+    # (mainly tests, which point each case at a fresh temp database).
+    if cached is not None and getattr(_local, "db_path", None) == db_path:
+        return cached
+    if cached is not None:
+        cached.close()
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(db_path, timeout=10)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=5000")
+    _local.conn = conn
+    _local.db_path = db_path
     return conn
 
 

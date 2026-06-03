@@ -25,10 +25,16 @@ class Settings(BaseSettings):
     openai_model_options: str = ""
     openai_timeout_seconds: float = 60.0
 
+    # Optional shared-secret guard for /api/* routes. Empty (the default) keeps
+    # the local single-user experience open; set it when exposing the backend
+    # beyond localhost so callers must send `Authorization: Bearer <token>`.
+    api_auth_token: str = ""
+
     database_url: str = "sqlite:///./data/paper2repo.db"
     upload_dir: str = "./storage/uploads"
     report_dir: str = "./storage/reports"
     upload_max_mb: int = 50
+    pdf_max_pages: int = 300
     run_stale_after_minutes: int = 60
     analysis_max_workers: int = 3
     analysis_job_lease_seconds: int = 3600

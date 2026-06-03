@@ -261,7 +261,7 @@ export default function BatchUpload() {
         </button>
       </div>
 
-      <p className="muted">{message}</p>
+      <p className="muted" aria-live="polite">{message}</p>
 
       {files.length > 0 && (
         <section className="panel">

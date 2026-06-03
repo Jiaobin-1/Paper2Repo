@@ -47,3 +47,11 @@ class TestParsePdf:
         pytest.importorskip("fitz")
         with pytest.raises(FileNotFoundError):
             parse_pdf("/nonexistent/path/to/paper.pdf")
+
+    def test_max_pages_caps_parsing(self, isolated_settings):
+        pytest.importorskip("fitz")
+        dest = isolated_settings / "sample.pdf"
+        shutil.copy(SAMPLE_PDF, dest)
+        result = parse_pdf(dest, max_pages=1)
+        assert result.page_count == 1
+        assert len(result.page_texts) == 1

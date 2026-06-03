@@ -157,11 +157,12 @@ export default function QaPanel({ runId }: { runId: string }) {
         <div ref={messagesEndRef} />
       </div>
 
-      {error ? <p className="qa-error">{error}</p> : null}
+      {error ? <p className="qa-error" role="alert">{error}</p> : null}
 
       <div className="qa-input-row">
         <textarea
           className="qa-input"
+          aria-label={text(language, "qaPlaceholder")}
           placeholder={text(language, "qaPlaceholder")}
           value={input}
           onChange={(e) => setInput(e.target.value)}

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getCitations } from "../../../lib/api";
+import { logError } from "../../../lib/logError";
 import { text } from "../../../lib/i18n";
 import { useAppLanguage } from "../../../lib/useAppLanguage";
 import type { CitationInfo } from "../../../lib/types";
@@ -20,7 +21,8 @@ export default function CitationNetwork({ runId }: { runId: string }) {
           setLoading(false);
         }
       })
-      .catch(() => {
+      .catch((error) => {
+        logError("Failed to load citations", error);
         if (isMounted) setLoading(false);
       });
     return () => {
