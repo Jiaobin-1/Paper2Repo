@@ -8,11 +8,13 @@ from app.core.database import (
     STALE_RUN_ERROR_MESSAGE,
     claim_analysis_job,
     create_analysis_job,
+    create_citations,
     create_paper,
     create_run,
     delete_run,
     fail_analysis_job,
     get_analysis_job,
+    get_citations_for_run,
     get_connection,
     get_run,
     init_db,
@@ -42,6 +44,37 @@ def test_init_db_creates_updated_at_and_run_updates(isolated_settings):
     assert updated_run["current_step"] == "parse_pdf_node"
     assert updated_run["progress_percent"] == 42
     assert updated_run["updated_at"]
+
+
+def test_init_db_creates_query_indexes(isolated_settings):
+    init_db()
+
+    with get_connection() as conn:
+        index_rows = []
+        for table in [
+            "papers",
+            "paper_chunks",
+            "analysis_runs",
+            "analysis_jobs",
+            "qa_messages",
+            "paper_embeddings",
+            "citations",
+        ]:
+            index_rows.extend(conn.execute(f"PRAGMA index_list({table})").fetchall())
+
+    indexes = {row["name"] for row in index_rows}
+    assert {
+        "idx_papers_created_at",
+        "idx_paper_chunks_paper_chunk",
+        "idx_analysis_runs_paper_created",
+        "idx_analysis_runs_status_updated",
+        "idx_analysis_runs_batch_created",
+        "idx_analysis_jobs_recovery",
+        "idx_qa_messages_run_created",
+        "idx_paper_embeddings_paper_chunk",
+        "idx_citations_run_index",
+        "idx_citations_paper_title",
+    } <= indexes
 
 
 def test_init_db_migrates_existing_analysis_runs_without_updated_at(isolated_settings):
@@ -179,12 +212,18 @@ def test_delete_run_removes_run_result_and_report_rows(isolated_settings):
     update_run_status(run["id"], "completed", completed=True, current_step="completed", progress_percent=100)
     save_analysis_result(run["id"], paper["id"], {})
     save_report(run["id"], paper["id"], "Report", "content", report_path)
+    create_citations(
+        run["id"],
+        paper["id"],
+        [{"index": 1, "authors": "A", "title": "Cited Paper", "raw_text": "A. Cited Paper."}],
+    )
 
     deleted = delete_run(run["id"])
 
     assert deleted["id"] == run["id"]
     assert get_run(run["id"]) is None
     assert get_report(run["id"]) is None
+    assert get_citations_for_run(run["id"]) == []
 
 
 def test_analysis_job_lifecycle_and_recovery(isolated_settings):

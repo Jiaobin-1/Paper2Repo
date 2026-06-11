@@ -65,3 +65,23 @@ class TestFullPipeline:
             report_resp = client.get(f"/api/runs/{run_id}/report")
             assert report_resp.status_code == 200
             assert len(report_resp.json()["content"]) > 0
+
+            markdown_resp = client.get(f"/api/runs/{run_id}/report.md")
+            assert markdown_resp.status_code == 200
+            assert "text/markdown" in markdown_resp.headers["content-type"]
+            assert len(markdown_resp.content) > 0
+
+            pdf_resp = client.get(f"/api/runs/{run_id}/report.pdf")
+            assert pdf_resp.status_code == 200
+            assert pdf_resp.headers["content-type"] == "application/pdf"
+            assert pdf_resp.content[:5] == b"%PDF-"
+
+            html_resp = client.get(f"/api/runs/{run_id}/report.html")
+            assert html_resp.status_code == 200
+            assert "text/html" in html_resp.headers["content-type"]
+            assert b"<html" in html_resp.content.lower()
+
+            latex_resp = client.get(f"/api/runs/{run_id}/report.tex")
+            assert latex_resp.status_code == 200
+            assert "application/x-latex" in latex_resp.headers["content-type"]
+            assert b"\\documentclass" in latex_resp.content

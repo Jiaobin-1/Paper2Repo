@@ -20,13 +20,17 @@ export async function mockAppApis(page: Page) {
     }),
   );
 
-  await page.route("**/api/runs**", (route) =>
-    route.fulfill({
+  await page.route("**/api/runs**", (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname !== "/api/runs") {
+      return route.fallback();
+    }
+    return route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify([]),
-    }),
-  );
+    });
+  });
 
   await page.route("**/api/llm/check", (route) =>
     route.fulfill({

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from app.schemas.chunks import ChunkMetadata, PaperChunk, RetrievedChunk
 from app.schemas.classification import PaperTypeClassification
 from app.schemas.common import EvidenceRef, MissingItem
@@ -10,6 +13,9 @@ from app.schemas.reproduction import ChecklistItem, ReproductionPlan
 from app.schemas.understanding import PaperUnderstanding, ReadingTask
 from app.services.markdown_exporter import build_markdown_report
 from app.services.paper_analysis import audit_reproduction_gaps, chunk_role, evidence_from_chunk
+from app.services.report_quality import assert_report_quality, evaluate_markdown_report
+
+FIXTURES = Path(__file__).parent / "fixtures"
 
 
 def test_section_role_detects_method_experiment_and_conclusion():
@@ -141,3 +147,31 @@ def test_markdown_report_contains_audit_sections():
     assert "### 证据地图" in report
     assert "### 实验复现矩阵" in report
     assert "### 验收标准" in report
+
+    expectations = json.loads((FIXTURES / "report_quality_baseline.json").read_text(encoding="utf-8"))
+    result = assert_report_quality(report, expectations)
+
+    assert result.ratio >= expectations["min_score_ratio"]
+
+
+def test_report_quality_gate_explains_failures():
+    expectations = {
+        "required_sections": ["复现审计摘要", "证据地图"],
+        "required_terms": {"dataset": ["ReproBench"]},
+        "min_evidence_refs": 2,
+        "min_missing_items": 1,
+        "min_action_items": 1,
+        "forbidden_phrases": ["generic summary"],
+    }
+
+    result = evaluate_markdown_report("# generic summary\n\nNo evidence.", expectations)
+
+    assert not result.passed
+    assert {failure.name for failure in result.failures} >= {
+        "required_sections",
+        "required_terms",
+        "evidence_refs",
+        "missing_items",
+        "action_items",
+        "forbidden_phrases",
+    }

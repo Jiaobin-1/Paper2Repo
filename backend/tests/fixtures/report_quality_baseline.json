@@ -1,0 +1,22 @@
+{
+  "min_score_ratio": 0.9,
+  "required_sections": [
+    "复现审计摘要",
+    "证据地图",
+    "实验复现矩阵",
+    "验收标准"
+  ],
+  "required_terms": {
+    "method": ["core_method", "核心方法"],
+    "dataset": ["ReproBench"],
+    "metric": ["F1"],
+    "reproduction": ["pipeline_reproduction", "最小实验"]
+  },
+  "min_evidence_refs": 4,
+  "min_missing_items": 1,
+  "min_action_items": 2,
+  "forbidden_phrases": [
+    "lorem ipsum",
+    "TODO: write report"
+  ]
+}

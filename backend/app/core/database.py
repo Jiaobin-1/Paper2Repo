@@ -184,6 +184,7 @@ def init_db() -> None:
         )
         _ensure_analysis_run_columns(conn)
         _ensure_batch_column(conn)
+        _ensure_indexes(conn)
         _ensure_default_model_setting(conn)
         _ensure_language_settings(conn)
         _ensure_paper_columns(conn)
@@ -294,6 +295,33 @@ def _ensure_paper_columns(conn: sqlite3.Connection) -> None:
     columns = {row["name"] for row in conn.execute("PRAGMA table_info(papers)").fetchall()}
     if "arxiv_id" not in columns:
         conn.execute("ALTER TABLE papers ADD COLUMN arxiv_id TEXT")
+
+
+def _ensure_indexes(conn: sqlite3.Connection) -> None:
+    conn.executescript(
+        """
+        CREATE INDEX IF NOT EXISTS idx_papers_created_at
+            ON papers(created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_paper_chunks_paper_chunk
+            ON paper_chunks(paper_id, chunk_index);
+        CREATE INDEX IF NOT EXISTS idx_analysis_runs_paper_created
+            ON analysis_runs(paper_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_analysis_runs_status_updated
+            ON analysis_runs(status, updated_at);
+        CREATE INDEX IF NOT EXISTS idx_analysis_runs_batch_created
+            ON analysis_runs(batch_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_analysis_jobs_recovery
+            ON analysis_jobs(status, cancel_requested, lease_until, created_at);
+        CREATE INDEX IF NOT EXISTS idx_qa_messages_run_created
+            ON qa_messages(run_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_paper_embeddings_paper_chunk
+            ON paper_embeddings(paper_id, chunk_index);
+        CREATE INDEX IF NOT EXISTS idx_citations_run_index
+            ON citations(run_id, citation_index);
+        CREATE INDEX IF NOT EXISTS idx_citations_paper_title
+            ON citations(paper_id, title);
+        """
+    )
 
 
 def _ensure_setting(conn: sqlite3.Connection, key: str, default_value: str, allowed_values: set[str]) -> None:
@@ -772,6 +800,7 @@ def delete_run(run_id: str) -> dict[str, Any] | None:
     with get_connection() as conn:
         conn.execute("DELETE FROM analysis_jobs WHERE run_id = ?", (run_id,))
         conn.execute("DELETE FROM qa_messages WHERE run_id = ?", (run_id,))
+        conn.execute("DELETE FROM citations WHERE run_id = ?", (run_id,))
         conn.execute("DELETE FROM reports WHERE run_id = ?", (run_id,))
         conn.execute("DELETE FROM analysis_results WHERE run_id = ?", (run_id,))
         conn.execute("DELETE FROM analysis_runs WHERE id = ?", (run_id,))
