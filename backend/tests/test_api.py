@@ -4,6 +4,7 @@ import time
 
 from fastapi.testclient import TestClient
 
+from app.core.database import create_paper, create_run, init_db, save_report, update_run_status
 from app.main import create_app
 
 
@@ -115,3 +116,45 @@ def test_delete_completed_run_removes_it_from_api(isolated_settings, monkeypatch
     assert delete_response.status_code == 200
     assert delete_response.json()["id"] == run_id
     assert detail_response.status_code == 404
+
+
+def test_delete_completed_paper_removes_records_and_files(isolated_settings):
+    init_db()
+    pdf_path = isolated_settings / "paper.pdf"
+    report_path = isolated_settings / "reports" / "run.md"
+    pdf_path.write_bytes(b"%PDF-1.4\n%%EOF")
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text("# Report", encoding="utf-8")
+    paper = create_paper("paper.pdf", pdf_path, pdf_path.stat().st_size)
+    run = create_run(paper["id"])
+    update_run_status(run["id"], "completed", completed=True, current_step="completed", progress_percent=100)
+    save_report(run["id"], paper["id"], "Report", "# Report", report_path)
+
+    with _client() as client:
+        delete_response = client.delete(f"/api/papers/{paper['id']}")
+        paper_response = client.get(f"/api/papers/{paper['id']}")
+        run_response = client.get(f"/api/runs/{run['id']}")
+
+    assert delete_response.status_code == 200
+    assert delete_response.json()["id"] == paper["id"]
+    assert paper_response.status_code == 404
+    assert run_response.status_code == 404
+    assert not pdf_path.exists()
+    assert not report_path.exists()
+
+
+def test_delete_paper_rejects_active_runs(isolated_settings):
+    init_db()
+    pdf_path = isolated_settings / "paper.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4\n%%EOF")
+    paper = create_paper("paper.pdf", pdf_path, pdf_path.stat().st_size)
+    create_run(paper["id"])
+
+    with _client() as client:
+        delete_response = client.delete(f"/api/papers/{paper['id']}")
+        paper_response = client.get(f"/api/papers/{paper['id']}")
+
+    assert delete_response.status_code == 409
+    assert delete_response.json()["detail"] == "Paper has pending or running analyses."
+    assert paper_response.status_code == 200
+    assert pdf_path.exists()

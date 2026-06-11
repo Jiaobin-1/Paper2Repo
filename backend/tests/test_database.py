@@ -11,16 +11,30 @@ from app.core.database import (
     create_citations,
     create_paper,
     create_run,
+    delete_paper,
     delete_run,
     fail_analysis_job,
+    get_all_embeddings,
     get_analysis_job,
+    get_analysis_result,
     get_citations_for_run,
     get_connection,
+    get_paper,
+    get_paper_chunks,
+    get_paper_storage_paths,
+    get_qa_history,
+    get_report,
     get_run,
     init_db,
     list_recoverable_analysis_jobs,
+    paper_has_active_runs,
     recover_stale_runs,
+    replace_chunks,
     request_analysis_cancel,
+    save_analysis_result,
+    save_embeddings,
+    save_qa_message,
+    save_report,
     update_run_status,
 )
 
@@ -199,8 +213,6 @@ def test_recover_stale_runs_marks_only_pending_and_running(isolated_settings):
 
 
 def test_delete_run_removes_run_result_and_report_rows(isolated_settings):
-    from app.core.database import get_report, save_analysis_result, save_report
-
     init_db()
     pdf_path = isolated_settings / "paper.pdf"
     report_path = isolated_settings / "reports" / "run.md"
@@ -224,6 +236,66 @@ def test_delete_run_removes_run_result_and_report_rows(isolated_settings):
     assert get_run(run["id"]) is None
     assert get_report(run["id"]) is None
     assert get_citations_for_run(run["id"]) == []
+
+
+def test_delete_paper_removes_all_dependent_rows(isolated_settings):
+    init_db()
+    pdf_path = isolated_settings / "paper.pdf"
+    report_path = isolated_settings / "reports" / "run.md"
+    pdf_path.write_bytes(b"%PDF-1.4\n%%EOF")
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text("report", encoding="utf-8")
+    paper = create_paper("paper.pdf", pdf_path, pdf_path.stat().st_size)
+    run = create_run(paper["id"])
+    update_run_status(run["id"], "completed", completed=True, current_step="completed", progress_percent=100)
+    create_analysis_job(run["id"], paper["id"])
+    replace_chunks(
+        paper["id"],
+        [
+            {
+                "content": "chunk content",
+                "metadata": {"chunk_index": 0, "page_start": 1, "page_end": 1, "section_title": "Intro"},
+            }
+        ],
+    )
+    save_embeddings(paper["id"], [(0, b"embedding")])
+    save_analysis_result(run["id"], paper["id"], {"metadata": {"title": "Paper"}})
+    save_report(run["id"], paper["id"], "Report", "content", report_path)
+    save_qa_message(run["id"], paper["id"], "user", "Question?")
+    create_citations(
+        run["id"],
+        paper["id"],
+        [{"index": 1, "authors": "A", "title": "Cited Paper", "raw_text": "A. Cited Paper."}],
+    )
+
+    assert paper_has_active_runs(paper["id"]) is False
+    assert set(get_paper_storage_paths(paper["id"])) == {str(pdf_path), str(report_path)}
+
+    deleted = delete_paper(paper["id"])
+
+    assert deleted["id"] == paper["id"]
+    assert get_paper(paper["id"]) is None
+    assert get_run(run["id"]) is None
+    assert get_analysis_job(run["id"]) is None
+    assert get_analysis_result(run["id"]) is None
+    assert get_report(run["id"]) is None
+    assert get_qa_history(run["id"]) == []
+    assert get_citations_for_run(run["id"]) == []
+    assert get_paper_chunks(paper["id"]) == []
+    assert get_all_embeddings() == []
+
+
+def test_paper_has_active_runs_detects_pending_and_running(isolated_settings):
+    init_db()
+    pdf_path = isolated_settings / "paper.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4\n%%EOF")
+    paper = create_paper("paper.pdf", pdf_path, pdf_path.stat().st_size)
+    run = create_run(paper["id"])
+
+    assert paper_has_active_runs(paper["id"]) is True
+
+    update_run_status(run["id"], "failed", completed=True, current_step="failed")
+    assert paper_has_active_runs(paper["id"]) is False
 
 
 def test_analysis_job_lifecycle_and_recovery(isolated_settings):

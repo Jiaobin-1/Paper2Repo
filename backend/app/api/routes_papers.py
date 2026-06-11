@@ -16,13 +16,16 @@ from app.core.database import (
     create_batch_id,
     create_paper,
     create_run,
+    delete_paper,
     fail_analysis_job,
     get_paper,
+    get_paper_storage_paths,
     get_run,
     is_analysis_cancel_requested,
     list_papers,
     list_recoverable_analysis_jobs,
     list_runs,
+    paper_has_active_runs,
     update_run_status,
 )
 from app.schemas.paper import BatchStartResponse, BatchUploadResponse, PaperResponse, RunListItemResponse, RunResponse
@@ -226,6 +229,29 @@ def get_paper_detail(paper_id: str) -> PaperResponse:
     if not paper:
         raise HTTPException(status_code=404, detail="Paper not found.")
     return PaperResponse(**paper)
+
+
+@router.delete(
+    "/{paper_id}",
+    response_model=PaperResponse,
+    summary="Delete a paper",
+    description="Delete a paper and all completed/failed analysis data, reports, chunks, embeddings, citations, and local files.",
+)
+def delete_paper_detail(paper_id: str) -> PaperResponse:
+    paper = get_paper(paper_id)
+    if not paper:
+        raise HTTPException(status_code=404, detail="Paper not found.")
+    if paper_has_active_runs(paper_id):
+        raise HTTPException(status_code=409, detail="Paper has pending or running analyses.")
+
+    storage_paths = get_paper_storage_paths(paper_id)
+    deleted_paper = delete_paper(paper_id)
+    if not deleted_paper:
+        raise HTTPException(status_code=404, detail="Paper not found.")
+
+    for path in storage_paths:
+        _delete_if_exists(Path(path))
+    return PaperResponse(**deleted_paper)
 
 
 @router.get(

@@ -464,6 +464,55 @@ def get_paper(paper_id: str) -> dict[str, Any] | None:
     return dict(row) if row else None
 
 
+def paper_has_active_runs(paper_id: str) -> bool:
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT 1
+            FROM analysis_runs
+            WHERE paper_id = ?
+              AND status IN ('pending', 'running')
+            LIMIT 1
+            """,
+            (paper_id,),
+        ).fetchone()
+    return row is not None
+
+
+def get_paper_storage_paths(paper_id: str) -> list[str]:
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT file_path
+            FROM papers
+            WHERE id = ?
+            UNION
+            SELECT file_path
+            FROM reports
+            WHERE paper_id = ?
+            """,
+            (paper_id, paper_id),
+        ).fetchall()
+    return [row["file_path"] for row in rows if row["file_path"]]
+
+
+def delete_paper(paper_id: str) -> dict[str, Any] | None:
+    paper = get_paper(paper_id)
+    if not paper:
+        return None
+    with get_connection() as conn:
+        conn.execute("DELETE FROM analysis_jobs WHERE paper_id = ?", (paper_id,))
+        conn.execute("DELETE FROM qa_messages WHERE paper_id = ?", (paper_id,))
+        conn.execute("DELETE FROM citations WHERE paper_id = ?", (paper_id,))
+        conn.execute("DELETE FROM reports WHERE paper_id = ?", (paper_id,))
+        conn.execute("DELETE FROM analysis_results WHERE paper_id = ?", (paper_id,))
+        conn.execute("DELETE FROM analysis_runs WHERE paper_id = ?", (paper_id,))
+        conn.execute("DELETE FROM paper_embeddings WHERE paper_id = ?", (paper_id,))
+        conn.execute("DELETE FROM paper_chunks WHERE paper_id = ?", (paper_id,))
+        conn.execute("DELETE FROM papers WHERE id = ?", (paper_id,))
+    return paper
+
+
 def update_paper_title(paper_id: str, title: str) -> None:
     with get_connection() as conn:
         conn.execute("UPDATE papers SET title = ? WHERE id = ?", (title, paper_id))
