@@ -12,15 +12,15 @@ import {
   getReportPdfUrl,
   startAnalysis,
   uploadPaper,
-} from "../../../lib/api";
-import { formatProgressMessage, formatRunStatusWithProgress } from "../../../lib/runPresentation";
-import { pollRunUntilTerminal } from "../../../lib/runPolling";
-import { formatFileSize } from "../../../lib/format";
-import { text } from "../../../lib/i18n";
-import { SETTINGS_UPDATED_EVENT, useAppLanguage } from "../../../lib/useAppLanguage";
-import type { AppSettings, Paper, Report, Run } from "../../../lib/types";
+} from "@/lib/api";
+import { SETTINGS_UPDATED_EVENT, useAppLanguage } from "@/hooks/useAppLanguage";
+import { formatFileSize } from "@/lib/format";
+import { text } from "@/lib/i18n";
+import { formatProgressMessage, formatRunStatusWithProgress } from "@/lib/runPresentation";
+import { pollRunUntilTerminal } from "@/lib/runPolling";
+import type { AppSettings, Paper, Report, Run } from "@/lib/types";
 import { WorkflowProgress } from "../report/RunProgress";
-import InfoBlock from "../shared/InfoBlock";
+import InfoBlock from "@/components/shared/InfoBlock";
 
 const MAX_PDF_SIZE_BYTES = 50 * 1024 * 1024;
 

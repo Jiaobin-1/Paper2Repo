@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { listRuns } from "../../../../lib/api";
+import { listRuns } from "@/lib/api";
 
 export default function PaperReportRedirect({ params }: { params: Promise<{ paperId: string }> }) {
   const router = useRouter();

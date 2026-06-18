@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getAppSettings } from "./api";
-import { SETTINGS_UPDATED_EVENT } from "./useAppLanguage";
-import type { ThemeMode } from "./types";
+import { SETTINGS_UPDATED_EVENT } from "@/hooks/useAppLanguage";
+import { getAppSettings } from "@/lib/api";
+import type { ThemeMode } from "@/lib/types";
 
 const DEFAULT_THEME: ThemeMode = "light";
 

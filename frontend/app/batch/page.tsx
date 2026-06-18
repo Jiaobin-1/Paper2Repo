@@ -1,8 +1,8 @@
 "use client";
 
-import { text } from "../../lib/i18n";
-import { useAppLanguage } from "../../lib/useAppLanguage";
-import BatchUpload from "../components/upload/BatchUpload";
+import BatchUpload from "@/components/upload/BatchUpload";
+import { useAppLanguage } from "@/hooks/useAppLanguage";
+import { text } from "@/lib/i18n";
 
 export default function BatchPage() {
   const language = useAppLanguage();

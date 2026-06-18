@@ -111,10 +111,19 @@ PDF / arXiv
 
 ```text
 Paper2Repo/
-├── backend/      FastAPI, LangGraph workflow, SQLite persistence
-├── frontend/     Next.js app, report UI, settings, batch tools
-├── docs/         API, architecture notes, sample report
-└── .github/      CI workflow
+├── backend/
+│   ├── app/api/         FastAPI route modules and aggregated API router
+│   ├── app/agents/      LangGraph workflow and analysis nodes
+│   ├── app/core/        app lifecycle, settings, SQLite persistence
+│   ├── app/services/    parsing, retrieval, export, and LLM services
+│   └── tests/           backend API and workflow coverage
+├── frontend/
+│   ├── app/             Next.js routes and page entrypoints
+│   ├── components/      reusable UI grouped by feature
+│   ├── hooks/           UI state hooks for language and theme
+│   └── lib/             API client, types, i18n, polling, formatting
+├── docs/                API, architecture notes, sample report
+└── .github/             CI workflow
 ```
 
 ## Documentation

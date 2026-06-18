@@ -35,13 +35,15 @@ parse_pdf_node
 
 ## Main Components
 
-- `backend/app/api`: FastAPI routers for papers, runs, reports, Q&A, arXiv, comparison, citations, knowledge search, settings, and LLM config.
+- `backend/app/api`: domain routers plus a single aggregated `api_router` used by the FastAPI app.
 - `backend/app/agents`: LangGraph workflow, state definition, prompts, and analysis nodes.
-- `backend/app/core`: settings and SQLite persistence.
+- `backend/app/core`: app lifespan wiring, settings, and SQLite persistence.
 - `backend/app/schemas`: Pydantic contracts for analysis outputs and API responses.
 - `backend/app/services`: PDF parsing, chunking, retrieval, LLM client, report exporters, Q&A, code skeletons, and arXiv client.
-- `frontend/app`: Next.js App Router pages and client components.
-- `frontend/lib`: API client, shared types, i18n, presentation helpers.
+- `frontend/app`: Next.js App Router entrypoints and route-level composition.
+- `frontend/components`: reusable UI grouped by upload, report, history, knowledge, and shared concerns.
+- `frontend/hooks`: client-side language and theme hooks.
+- `frontend/lib`: API client, shared types, i18n, polling, and presentation helpers.
 
 ## Storage
 

@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback } from "react";
-import { updateAppSettings } from "../../../lib/api";
-import { text } from "../../../lib/i18n";
-import { SETTINGS_UPDATED_EVENT, useAppLanguage } from "../../../lib/useAppLanguage";
-import { useTheme } from "../../../lib/useTheme";
-import type { ThemeMode } from "../../../lib/types";
+import { SETTINGS_UPDATED_EVENT, useAppLanguage } from "@/hooks/useAppLanguage";
+import { useTheme } from "@/hooks/useTheme";
+import { updateAppSettings } from "@/lib/api";
+import { text } from "@/lib/i18n";
+import type { ThemeMode } from "@/lib/types";
 
 function NavIcon({ path }: { path: string }) {
   return (

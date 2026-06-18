@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getCitations } from "../../../lib/api";
-import { text } from "../../../lib/i18n";
-import { useAppLanguage } from "../../../lib/useAppLanguage";
-import type { CitationInfo } from "../../../lib/types";
+import { useAppLanguage } from "@/hooks/useAppLanguage";
+import { getCitations } from "@/lib/api";
+import { text } from "@/lib/i18n";
+import type { CitationInfo } from "@/lib/types";
 
 export default function CitationNetwork({ runId }: { runId: string }) {
   const language = useAppLanguage();

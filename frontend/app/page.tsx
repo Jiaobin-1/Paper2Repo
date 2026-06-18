@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import PaperUpload from "./components/upload/PaperUpload";
-import RunHistory from "./components/history/RunHistory";
-import { text } from "../lib/i18n";
-import { useAppLanguage } from "../lib/useAppLanguage";
+import RunHistory from "@/components/history/RunHistory";
+import PaperUpload from "@/components/upload/PaperUpload";
+import { useAppLanguage } from "@/hooks/useAppLanguage";
+import { text } from "@/lib/i18n";
 
 export default function HomePage() {
   const language = useAppLanguage();

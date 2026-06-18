@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useCallback, useState } from "react";
-import { searchKnowledge } from "../../../lib/api";
-import { text } from "../../../lib/i18n";
-import { useAppLanguage } from "../../../lib/useAppLanguage";
-import type { KnowledgeSearchResult } from "../../../lib/types";
+import { useAppLanguage } from "@/hooks/useAppLanguage";
+import { searchKnowledge } from "@/lib/api";
+import { text } from "@/lib/i18n";
+import type { KnowledgeSearchResult } from "@/lib/types";
 
 export default function KnowledgeSearch() {
   const language = useAppLanguage();

@@ -2,17 +2,17 @@
 
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { getReport, getReportHtmlUrl, getReportLatexUrl, getReportMarkdownUrl, getReportPdfUrl, getSkeletonUrl } from "../../../lib/api";
-import { formatProgressMessage, formatRunStatusWithProgress } from "../../../lib/runPresentation";
-import { pollRunUntilTerminal } from "../../../lib/runPolling";
-import { text } from "../../../lib/i18n";
-import { useAppLanguage } from "../../../lib/useAppLanguage";
-import type { Report, Run } from "../../../lib/types";
+import { useAppLanguage } from "@/hooks/useAppLanguage";
+import { getReport, getReportHtmlUrl, getReportLatexUrl, getReportMarkdownUrl, getReportPdfUrl, getSkeletonUrl } from "@/lib/api";
+import { text } from "@/lib/i18n";
+import { formatProgressMessage, formatRunStatusWithProgress } from "@/lib/runPresentation";
+import { pollRunUntilTerminal } from "@/lib/runPolling";
+import type { Report, Run } from "@/lib/types";
 import { WorkflowProgress } from "./RunProgress";
 import QaPanel from "./QaPanel";
 import PwcLinks from "./PwcLinks";
 import CitationNetwork from "./CitationNetwork";
-import InfoBlock from "../shared/InfoBlock";
+import InfoBlock from "@/components/shared/InfoBlock";
 
 export default function RunReport({ runId }: { runId: string }) {
   const language = useAppLanguage();

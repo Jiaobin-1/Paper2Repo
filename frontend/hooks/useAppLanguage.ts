@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getAppSettings } from "./api";
-import { DEFAULT_UI_LANGUAGE } from "./i18n";
-import type { LanguageCode } from "./types";
+import { getAppSettings } from "@/lib/api";
+import { DEFAULT_UI_LANGUAGE } from "@/lib/i18n";
+import type { LanguageCode } from "@/lib/types";
 
 export const SETTINGS_UPDATED_EVENT = "paper2repo:settings-updated";
 

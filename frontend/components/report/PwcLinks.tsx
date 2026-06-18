@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getPwcLinks } from "../../../lib/api";
-import { text } from "../../../lib/i18n";
-import { useAppLanguage } from "../../../lib/useAppLanguage";
-import type { PwcLink } from "../../../lib/types";
+import { useAppLanguage } from "@/hooks/useAppLanguage";
+import { getPwcLinks } from "@/lib/api";
+import { text } from "@/lib/i18n";
+import type { PwcLink } from "@/lib/types";
 
 const TYPE_LABELS: Record<string, { zh: string; en: string }> = {
   paper: { zh: "论文", en: "Paper" },

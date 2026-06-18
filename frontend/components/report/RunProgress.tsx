@@ -1,7 +1,7 @@
-import { displayProgressPercent, formatRunTiming, formatStepLabel, getStepStates, WORKFLOW_STEPS } from "../../../lib/runPresentation";
-import { useAppLanguage } from "../../../lib/useAppLanguage";
-import { text } from "../../../lib/i18n";
-import type { Run } from "../../../lib/types";
+import { useAppLanguage } from "@/hooks/useAppLanguage";
+import { text } from "@/lib/i18n";
+import { displayProgressPercent, formatRunTiming, formatStepLabel, getStepStates, WORKFLOW_STEPS } from "@/lib/runPresentation";
+import type { Run } from "@/lib/types";
 
 export function WorkflowProgress({ run }: { run: Run }) {
   const language = useAppLanguage();

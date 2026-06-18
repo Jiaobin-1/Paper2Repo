@@ -1,10 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { askQuestionStream, getQaHistory } from "../../../lib/api";
-import { text } from "../../../lib/i18n";
-import { useAppLanguage } from "../../../lib/useAppLanguage";
-import type { QaMessage } from "../../../lib/types";
+import { useAppLanguage } from "@/hooks/useAppLanguage";
+import { askQuestionStream, getQaHistory } from "@/lib/api";
+import { text } from "@/lib/i18n";
+import type { QaMessage } from "@/lib/types";
 
 export default function QaPanel({ runId }: { runId: string }) {
   const language = useAppLanguage();

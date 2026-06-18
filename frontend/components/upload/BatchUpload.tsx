@@ -2,16 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import {
-  startBatchAnalysis,
-  uploadPapers,
-} from "../../../lib/api";
-import { formatFileSize } from "../../../lib/format";
-import { formatRunStatusWithProgress } from "../../../lib/runPresentation";
-import { pollRunUntilTerminal } from "../../../lib/runPolling";
-import { text } from "../../../lib/i18n";
-import { useAppLanguage } from "../../../lib/useAppLanguage";
-import type { LanguageCode, Paper, Run } from "../../../lib/types";
+import { useAppLanguage } from "@/hooks/useAppLanguage";
+import { startBatchAnalysis, uploadPapers } from "@/lib/api";
+import { formatFileSize } from "@/lib/format";
+import { text } from "@/lib/i18n";
+import { formatRunStatusWithProgress } from "@/lib/runPresentation";
+import { pollRunUntilTerminal } from "@/lib/runPolling";
+import type { LanguageCode, Paper, Run } from "@/lib/types";
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
 const MAX_FILES = 20;

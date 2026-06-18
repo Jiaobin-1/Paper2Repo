@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { checkLlmConnection, getAppSettings, updateAppSettings } from "../../lib/api";
-import { text } from "../../lib/i18n";
-import { SETTINGS_UPDATED_EVENT, useAppLanguage } from "../../lib/useAppLanguage";
-import type { AppSettings, LanguageCode, ThemeMode } from "../../lib/types";
+import { SETTINGS_UPDATED_EVENT, useAppLanguage } from "@/hooks/useAppLanguage";
+import { checkLlmConnection, getAppSettings, updateAppSettings } from "@/lib/api";
+import { text } from "@/lib/i18n";
+import type { AppSettings, LanguageCode, ThemeMode } from "@/lib/types";
 
 export default function SettingsPage() {
   const language = useAppLanguage();
