@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,16 @@ SAMPLE_PDF = FIXTURES / "sample.pdf"
 
 def _client():
     return TestClient(create_app())
+
+
+def _wait_for_terminal_run(client: TestClient, run_id: str, timeout: float = 5.0):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        response = client.get(f"/api/runs/{run_id}")
+        if response.json()["status"] in {"completed", "failed"}:
+            return response
+        time.sleep(0.01)
+    raise AssertionError(f"Run {run_id} did not reach a terminal state.")
 
 
 pytestmark = pytest.mark.skipif(
@@ -45,7 +56,7 @@ class TestFullPipeline:
             assert run_resp.status_code == 200
             run_id = run_resp.json()["id"]
 
-            detail_resp = client.get(f"/api/runs/{run_id}")
+            detail_resp = _wait_for_terminal_run(client, run_id)
             assert detail_resp.status_code == 200
             assert detail_resp.json()["status"] == "completed"
 

@@ -3,6 +3,8 @@ from __future__ import annotations
 import sqlite3
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from app.core.config import get_settings
 from app.core.database import (
     STALE_RUN_ERROR_MESSAGE,
@@ -42,6 +44,35 @@ def test_init_db_creates_updated_at_and_run_updates(isolated_settings):
     assert updated_run["current_step"] == "parse_pdf_node"
     assert updated_run["progress_percent"] == 42
     assert updated_run["updated_at"]
+
+
+def test_init_db_enables_foreign_keys_and_query_indexes(isolated_settings):
+    init_db()
+    with get_connection() as conn:
+        assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+        index_names = {
+            row["name"]
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'index'").fetchall()
+        }
+
+    assert "idx_analysis_runs_paper_created" in index_names
+    assert "idx_analysis_jobs_recovery" in index_names
+    assert "idx_paper_embeddings_paper_chunk" in index_names
+
+
+def test_foreign_keys_reject_orphan_run(isolated_settings):
+    init_db()
+    now = datetime.now(UTC).isoformat()
+    with pytest.raises(sqlite3.IntegrityError), get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO analysis_runs (
+                id, paper_id, status, current_step, progress_percent,
+                started_at, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("orphan", "missing-paper", "pending", "queued", 0, now, now, now),
+        )
 
 
 def test_init_db_migrates_existing_analysis_runs_without_updated_at(isolated_settings):
@@ -198,6 +229,7 @@ def test_analysis_job_lifecycle_and_recovery(isolated_settings):
 
     assert job["status"] == "pending"
     assert claim_analysis_job(run["id"]) == "claimed"
+    assert claim_analysis_job(run["id"]) == "busy"
     assert get_analysis_job(run["id"])["attempts"] == 1
     assert fail_analysis_job(run["id"], "temporary") == "pending"
     assert list_recoverable_analysis_jobs()[0]["run_id"] == run["id"]

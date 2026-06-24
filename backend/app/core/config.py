@@ -29,10 +29,12 @@ class Settings(BaseSettings):
     upload_dir: str = "./storage/uploads"
     report_dir: str = "./storage/reports"
     upload_max_mb: int = 50
+    pdf_max_pages: int = 300
     run_stale_after_minutes: int = 60
     analysis_max_workers: int = 3
     analysis_job_lease_seconds: int = 3600
     analysis_job_max_attempts: int = 2
+    analysis_recovery_interval_seconds: int = 30
 
     model_config = SettingsConfigDict(
         env_file=BACKEND_ROOT.parent / ".env",

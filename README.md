@@ -106,6 +106,10 @@ PDF / arXiv
 | `OPENAI_TIMEOUT_SECONDS` | LLM request timeout | `60` |
 | `DATABASE_URL` | SQLite database URL | `sqlite:///./data/paper2repo.db` |
 | `UPLOAD_MAX_MB` | Single upload size limit | `50` |
+| `PDF_MAX_PAGES` | Maximum pages parsed from one PDF | `300` |
+| `ANALYSIS_MAX_WORKERS` | Shared worker limit for all analysis runs | `3` |
+| `ANALYSIS_JOB_LEASE_SECONDS` | Worker lease before an interrupted job can be reclaimed | `3600` |
+| `ANALYSIS_RECOVERY_INTERVAL_SECONDS` | Periodic interrupted-job recovery interval | `30` |
 
 ## Project Structure
 
@@ -149,9 +153,19 @@ npm run test:e2e
 
 Current local verification baseline:
 
-- `pytest`: 176 tests
-- `vitest`: 34 tests
-- `Playwright`: 21 tests
+- `pytest`: 197 tests
+- `vitest`: 42 tests
+- `Playwright`: 21 mocked UI tests plus 1 real frontend-backend flow
+
+Run the real full-stack flow locally with a Python environment that has the backend dependencies installed:
+
+```bash
+cd frontend
+npm run test:e2e:fullstack
+```
+
+If the backend dependencies live in the documented Conda environment, set
+`FULLSTACK_BACKEND_COMMAND="conda run -n agent-learning python -m uvicorn app.main:app --host 127.0.0.1 --port 8000"`.
 
 ## Repository Hygiene
 

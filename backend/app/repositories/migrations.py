@@ -143,6 +143,7 @@ def init_db() -> None:
         _ensure_default_model_setting(conn)
         _ensure_language_settings(conn)
         _ensure_paper_columns(conn)
+        _ensure_indexes(conn)
         _repair_completed_runs(conn)
         recover_stale_runs(conn)
 
@@ -198,3 +199,26 @@ def _ensure_batch_column(conn: sqlite3.Connection) -> None:
     columns = {row["name"] for row in conn.execute("PRAGMA table_info(analysis_runs)").fetchall()}
     if "batch_id" not in columns:
         conn.execute("ALTER TABLE analysis_runs ADD COLUMN batch_id TEXT")
+
+
+def _ensure_indexes(conn: sqlite3.Connection) -> None:
+    conn.executescript(
+        """
+        CREATE INDEX IF NOT EXISTS idx_paper_chunks_paper_chunk
+            ON paper_chunks(paper_id, chunk_index);
+        CREATE INDEX IF NOT EXISTS idx_paper_embeddings_paper_chunk
+            ON paper_embeddings(paper_id, chunk_index);
+        CREATE INDEX IF NOT EXISTS idx_analysis_runs_paper_created
+            ON analysis_runs(paper_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_analysis_runs_batch
+            ON analysis_runs(batch_id);
+        CREATE INDEX IF NOT EXISTS idx_analysis_runs_status_updated
+            ON analysis_runs(status, updated_at);
+        CREATE INDEX IF NOT EXISTS idx_analysis_jobs_recovery
+            ON analysis_jobs(status, cancel_requested, lease_until, created_at);
+        CREATE INDEX IF NOT EXISTS idx_qa_messages_run_created
+            ON qa_messages(run_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_citations_run_index
+            ON citations(run_id, citation_index);
+        """
+    )

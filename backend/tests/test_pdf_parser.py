@@ -47,3 +47,14 @@ class TestParsePdf:
         pytest.importorskip("fitz")
         with pytest.raises(FileNotFoundError):
             parse_pdf("/nonexistent/path/to/paper.pdf")
+
+    def test_rejects_pdf_over_page_limit(self, isolated_settings):
+        fitz = pytest.importorskip("fitz")
+        path = isolated_settings / "too-many-pages.pdf"
+        with fitz.open() as document:
+            document.new_page()
+            document.new_page()
+            document.save(path)
+
+        with pytest.raises(RuntimeError, match="exceeding the configured limit of 1"):
+            parse_pdf(path, max_pages=1)

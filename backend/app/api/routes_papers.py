@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 
 from app.core.config import get_settings
 from app.core.database import (
@@ -13,7 +13,7 @@ from app.core.database import (
     list_runs,
 )
 from app.schemas.paper import BatchStartResponse, BatchUploadResponse, PaperResponse, RunListItemResponse, RunResponse
-from app.services.analysis_runner import AnalysisRunRequest, run_analysis_background, run_batch_analysis
+from app.services.analysis_runner import AnalysisRunRequest, submit_analysis, submit_batch_analysis
 from app.services.uploads import save_pdf_upload, save_pdf_uploads
 
 router = APIRouter(
@@ -78,14 +78,14 @@ def get_paper_runs(paper_id: str) -> list[RunListItemResponse]:
     summary="Start analysis",
     description="Start a new analysis run for the paper. The analysis runs in the background.",
 )
-def start_run(paper_id: str, background_tasks: BackgroundTasks) -> RunResponse:
+def start_run(paper_id: str) -> RunResponse:
     paper = get_paper(paper_id)
     if not paper:
         raise HTTPException(status_code=404, detail="Paper not found.")
 
     run = create_run(paper_id)
     create_analysis_job(run["id"], paper_id)
-    background_tasks.add_task(run_analysis_background, paper_id, run["id"], paper["file_path"], run.get("model_name"))
+    submit_analysis(paper_id, run["id"], paper["file_path"], run.get("model_name"))
     return RunResponse(**run)
 
 
@@ -122,7 +122,6 @@ def upload_batch(files: list[UploadFile] = File(...)) -> BatchUploadResponse:
     description="Start parallel analysis for multiple papers. Uses thread pool with max 3 workers.",
 )
 def start_batch(
-    background_tasks: BackgroundTasks,
     paper_ids: str = Query(..., description="Comma-separated paper IDs"),
 ) -> BatchStartResponse:
     ids = [pid.strip() for pid in paper_ids.split(",") if pid.strip()]
@@ -149,5 +148,5 @@ def start_batch(
         )
         runs.append(RunResponse(**run))
 
-    background_tasks.add_task(run_batch_analysis, tasks)
+    submit_batch_analysis(tasks)
     return BatchStartResponse(batch_id=batch_id, runs=runs)

@@ -9,3 +9,4 @@ PyMuPDF>=1.24.0
 reportlab>=4.2.0
 sentence-transformers>=3.0.0
 numpy>=1.26.0
+defusedxml>=0.7.1

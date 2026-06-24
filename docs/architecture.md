@@ -9,7 +9,7 @@ PDF upload / arXiv import / batch upload
 -> papers row
 -> run row with selected model and optional batch id
 -> recoverable analysis job
--> FastAPI BackgroundTasks / ThreadPoolExecutor
+-> shared bounded ThreadPoolExecutor
 -> LangGraph workflow
 -> frontend polling sees progress and completion
 -> report, exports, Q&A, citations, skeleton, knowledge search
@@ -57,15 +57,15 @@ parse_pdf_node
 ## Background Jobs
 
 - Each run creates a recoverable analysis job.
-- Startup recovery reclaims unfinished jobs that are safe to retry.
-- Batch analysis uses a bounded worker pool controlled by `ANALYSIS_MAX_WORKERS`.
-- Pending/running runs can be canceled through the API.
+- Single, batch, arXiv, and recovered runs share one bounded worker pool controlled by `ANALYSIS_MAX_WORKERS`.
+- Leases are renewed at workflow progress boundaries; startup and periodic recovery reclaim interrupted jobs that are safe to retry.
+- Pending/running runs can be canceled through the API, and cancellation is checked before a run can be finalized as completed.
 
 ## Frontend Runtime
 
 - Next.js rewrites `/api/*` to the FastAPI backend during local development.
 - The frontend polls run status and renders report/Q&A/download views when a run completes.
-- Playwright tests mock API responses for CI stability; backend integration behavior is covered by pytest.
+- Playwright uses mocked API responses for deterministic UI coverage and a separate real frontend-backend upload/report flow.
 
 ## Current Boundaries
 

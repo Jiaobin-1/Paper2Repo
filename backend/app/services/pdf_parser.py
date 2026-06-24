@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from app.core.config import get_settings
 from app.schemas.parsed import PageText, ParsedPaper, SectionCandidate
 
 SECTION_PATTERNS = [
@@ -11,6 +12,10 @@ SECTION_PATTERNS = [
     r"^\s*(references|appendix)\s*$",
     r"^\s*((\d+|[IVX]+)\.?\s+[A-Z][A-Za-z0-9 ,:/\-()]{2,80})\s*$",
 ]
+
+
+class PdfPageLimitError(RuntimeError):
+    pass
 
 
 def _find_section_candidates(page_number: int, text: str) -> list[SectionCandidate]:
@@ -26,7 +31,7 @@ def _find_section_candidates(page_number: int, text: str) -> list[SectionCandida
     return candidates
 
 
-def parse_pdf(pdf_path: str | Path) -> ParsedPaper:
+def parse_pdf(pdf_path: str | Path, *, max_pages: int | None = None) -> ParsedPaper:
     try:
         import fitz
     except ImportError as exc:
@@ -42,11 +47,18 @@ def parse_pdf(pdf_path: str | Path) -> ParsedPaper:
 
     try:
         with fitz.open(path) as document:
+            page_limit = max(1, max_pages or get_settings().pdf_max_pages)
+            if document.page_count > page_limit:
+                raise PdfPageLimitError(
+                    f"PDF has {document.page_count} pages, exceeding the configured limit of {page_limit}."
+                )
             for index, page in enumerate(document, start=1):
                 text = page.get_text("text").strip()
                 page_texts.append(PageText(page_number=index, text=text))
                 raw_parts.append(text)
                 sections.extend(_find_section_candidates(index, text))
+    except PdfPageLimitError:
+        raise
     except Exception as exc:
         raise RuntimeError("PDF parsing failed. Please confirm the uploaded file is a readable PDF.") from exc
 

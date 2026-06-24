@@ -42,7 +42,7 @@ def get_analysis_job(run_id: str) -> dict[str, Any] | None:
 
 
 def claim_analysis_job(run_id: str) -> str:
-    """Return claimed, missing, completed, or canceled."""
+    """Return claimed, busy, missing, completed, or canceled."""
     settings = get_settings()
     lease_until = (datetime.now(UTC) + timedelta(seconds=max(60, settings.analysis_job_lease_seconds))).isoformat()
     now = utc_now()
@@ -62,15 +62,34 @@ def claim_analysis_job(run_id: str) -> str:
                 ("canceled", now, run_id),
             )
             return "canceled"
-        conn.execute(
+        cursor = conn.execute(
             """
             UPDATE analysis_jobs
             SET status = ?, attempts = attempts + 1, lease_until = ?, error_message = NULL, updated_at = ?
             WHERE run_id = ?
+              AND cancel_requested = 0
+              AND status IN ('pending', 'running')
+              AND (status = 'pending' OR lease_until IS NULL OR lease_until < ?)
             """,
-            ("running", lease_until, now, run_id),
+            ("running", lease_until, now, run_id, now),
         )
-    return "claimed"
+    return "claimed" if cursor.rowcount > 0 else "busy"
+
+
+def renew_analysis_job_lease(run_id: str) -> bool:
+    settings = get_settings()
+    lease_until = (datetime.now(UTC) + timedelta(seconds=max(60, settings.analysis_job_lease_seconds))).isoformat()
+    now = utc_now()
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """
+            UPDATE analysis_jobs
+            SET lease_until = ?, updated_at = ?
+            WHERE run_id = ? AND status = 'running' AND cancel_requested = 0
+            """,
+            (lease_until, now, run_id),
+        )
+    return cursor.rowcount > 0
 
 
 def complete_analysis_job(run_id: str) -> None:

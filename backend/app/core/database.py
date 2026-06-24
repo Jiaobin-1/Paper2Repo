@@ -6,6 +6,7 @@ from app.repositories.analysis_jobs import (
     get_analysis_job,
     is_analysis_cancel_requested,
     list_recoverable_analysis_jobs,
+    renew_analysis_job_lease,
     request_analysis_cancel,
 )
 from app.repositories.citations import create_citations, get_citations_for_run
@@ -92,6 +93,7 @@ __all__ = [
     "list_recoverable_analysis_jobs",
     "list_runs",
     "recover_stale_runs",
+    "renew_analysis_job_lease",
     "replace_chunks",
     "request_analysis_cancel",
     "save_analysis_result",

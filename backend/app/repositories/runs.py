@@ -30,6 +30,14 @@ def recover_stale_runs(conn: sqlite3.Connection | None = None) -> int:
                 updated_at = ?
             WHERE status IN ('pending', 'running')
               AND COALESCE(updated_at, started_at, created_at) < ?
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM analysis_jobs j
+                  WHERE j.run_id = analysis_runs.id
+                    AND j.cancel_requested = 0
+                    AND j.status IN ('pending', 'running')
+                    AND j.attempts < j.max_attempts
+              )
             """,
             ("failed", STALE_RUN_ERROR_MESSAGE, "failed", now, now, cutoff),
         )
@@ -123,6 +131,7 @@ def delete_run(run_id: str) -> dict[str, Any] | None:
     with get_connection() as conn:
         conn.execute("DELETE FROM analysis_jobs WHERE run_id = ?", (run_id,))
         conn.execute("DELETE FROM qa_messages WHERE run_id = ?", (run_id,))
+        conn.execute("DELETE FROM citations WHERE run_id = ?", (run_id,))
         conn.execute("DELETE FROM reports WHERE run_id = ?", (run_id,))
         conn.execute("DELETE FROM analysis_results WHERE run_id = ?", (run_id,))
         conn.execute("DELETE FROM analysis_runs WHERE id = ?", (run_id,))

@@ -1,14 +1,15 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.core.config import get_settings
 from app.core.database import create_analysis_job, create_paper, create_run, update_paper_title
 from app.schemas.paper import PaperResponse
-from app.services.analysis_runner import run_analysis_background
+from app.services.analysis_runner import submit_analysis
 from app.services.arxiv_client import (
     download_arxiv_pdf,
     fetch_arxiv_metadata,
@@ -38,7 +39,6 @@ class ArxivVersionResponse(BaseModel):
 )
 def import_arxiv(
     payload: ArxivImportRequest,
-    background_tasks: BackgroundTasks,
 ) -> PaperResponse:
     arxiv_id = normalize_arxiv_id(payload.arxiv_id)
     if not arxiv_id:
@@ -48,9 +48,9 @@ def import_arxiv(
     settings.upload_path.mkdir(parents=True, exist_ok=True)
 
     try:
-        pdf_path = download_arxiv_pdf(arxiv_id, settings.upload_path)
+        pdf_path = download_arxiv_pdf(arxiv_id, settings.upload_path, max_bytes=settings.upload_max_bytes)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Failed to download PDF from arXiv: {exc}") from exc
+        raise HTTPException(status_code=502, detail="Failed to download a valid PDF from arXiv.") from exc
 
     file_size = pdf_path.stat().st_size
     metadata = fetch_arxiv_metadata(arxiv_id)
@@ -69,7 +69,7 @@ def import_arxiv(
 
     run = create_run(paper["id"])
     create_analysis_job(run["id"], paper["id"])
-    background_tasks.add_task(run_analysis_background, paper["id"], run["id"], str(pdf_path), run.get("model_name"))
+    submit_analysis(paper["id"], run["id"], str(pdf_path), run.get("model_name"))
 
     return PaperResponse(**paper)
 
@@ -103,11 +103,13 @@ def compare_versions(
     arxiv_id: str,
     version_a: str,
     version_b: str,
-    background_tasks: BackgroundTasks,
 ) -> dict[str, Any]:
     base_id = normalize_arxiv_id(arxiv_id)
     if not base_id:
         raise HTTPException(status_code=400, detail="Invalid arXiv ID.")
+    base_id = re.sub(r"v\d+$", "", base_id)
+    if not re.fullmatch(r"v\d+", version_a) or not re.fullmatch(r"v\d+", version_b):
+        raise HTTPException(status_code=400, detail="Versions must use the form v1, v2, and so on.")
 
     id_a = f"{base_id}{version_a}" if not base_id.endswith(version_a) else base_id
     id_b = f"{base_id}{version_b}" if not base_id.endswith(version_b) else base_id
@@ -118,7 +120,7 @@ def compare_versions(
     results = {}
     for label, vid in [("version_a", id_a), ("version_b", id_b)]:
         try:
-            pdf_path = download_arxiv_pdf(vid, settings.upload_path)
+            pdf_path = download_arxiv_pdf(vid, settings.upload_path, max_bytes=settings.upload_max_bytes)
             metadata = fetch_arxiv_metadata(vid)
             paper = create_paper(
                 filename=pdf_path.name,
@@ -129,16 +131,14 @@ def compare_versions(
             )
             run = create_run(paper["id"])
             create_analysis_job(run["id"], paper["id"])
-            background_tasks.add_task(
-                run_analysis_background, paper["id"], run["id"], str(pdf_path), run.get("model_name"),
-            )
+            submit_analysis(paper["id"], run["id"], str(pdf_path), run.get("model_name"))
             results[label] = {
                 "paper_id": paper["id"],
                 "run_id": run["id"],
                 "arxiv_id": vid,
                 "status": "analysis_started",
             }
-        except Exception as exc:
-            results[label] = {"error": str(exc)}
+        except Exception:
+            results[label] = {"error": "Failed to download or start analysis for this arXiv version."}
 
     return results
