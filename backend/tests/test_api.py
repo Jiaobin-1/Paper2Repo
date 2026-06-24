@@ -46,12 +46,12 @@ def test_upload_rejects_too_large_pdf_and_removes_partial_file(isolated_settings
 
 
 def test_upload_accepts_valid_pdf_and_start_run_success(isolated_settings, monkeypatch):
-    from app.api import routes_papers
+    from app.services import analysis_runner
 
     def fake_run_analysis(**kwargs):
         kwargs["progress_callback"]("parse_pdf_node", 35)
 
-    monkeypatch.setattr(routes_papers, "run_analysis", fake_run_analysis)
+    monkeypatch.setattr(analysis_runner, "run_analysis", fake_run_analysis)
 
     with _client() as client:
         upload_response = client.post(
@@ -78,12 +78,12 @@ def test_upload_accepts_valid_pdf_and_start_run_success(isolated_settings, monke
 
 
 def test_delete_completed_run_removes_it_from_api(isolated_settings, monkeypatch):
-    from app.api import routes_papers
+    from app.services import analysis_runner
 
     def fake_run_analysis(**kwargs):
         kwargs["progress_callback"]("persist_result_node", 100)
 
-    monkeypatch.setattr(routes_papers, "run_analysis", fake_run_analysis)
+    monkeypatch.setattr(analysis_runner, "run_analysis", fake_run_analysis)
 
     with _client() as client:
         upload_response = client.post(
@@ -100,3 +100,59 @@ def test_delete_completed_run_removes_it_from_api(isolated_settings, monkeypatch
     assert delete_response.status_code == 200
     assert delete_response.json()["id"] == run_id
     assert detail_response.status_code == 404
+
+
+def test_batch_upload_rejects_invalid_pdf_without_partial_files_or_papers(isolated_settings):
+    with _client() as client:
+        response = client.post(
+            "/api/papers/upload-batch",
+            files=[
+                ("files", ("valid.pdf", b"%PDF-1.4\n%%EOF", "application/pdf")),
+                ("files", ("invalid.pdf", b"not a pdf", "application/pdf")),
+            ],
+        )
+        papers_response = client.get("/api/papers")
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Uploaded file is not a valid PDF."
+    assert papers_response.json() == []
+    assert list((isolated_settings / "uploads").glob("*")) == []
+
+
+def test_batch_upload_rejects_non_pdf_without_partial_files_or_papers(isolated_settings):
+    with _client() as client:
+        response = client.post(
+            "/api/papers/upload-batch",
+            files=[
+                ("files", ("valid.pdf", b"%PDF-1.4\n%%EOF", "application/pdf")),
+                ("files", ("notes.txt", b"%PDF-1.4\n%%EOF", "application/pdf")),
+            ],
+        )
+        papers_response = client.get("/api/papers")
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Only PDF files are supported. Rejected: notes.txt"
+    assert papers_response.json() == []
+    assert list((isolated_settings / "uploads").glob("*")) == []
+
+
+def test_batch_upload_rejects_total_size_without_partial_files_or_papers(isolated_settings, monkeypatch):
+    from app.api import routes_papers
+
+    monkeypatch.setattr(routes_papers, "MAX_BATCH_TOTAL_SIZE", 1024 * 1024)
+    pdf_bytes = b"%PDF-" + (b"x" * (600 * 1024))
+
+    with _client() as client:
+        response = client.post(
+            "/api/papers/upload-batch",
+            files=[
+                ("files", ("one.pdf", pdf_bytes, "application/pdf")),
+                ("files", ("two.pdf", pdf_bytes, "application/pdf")),
+            ],
+        )
+        papers_response = client.get("/api/papers")
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Total batch size exceeds 1 MB limit."
+    assert papers_response.json() == []
+    assert list((isolated_settings / "uploads").glob("*")) == []

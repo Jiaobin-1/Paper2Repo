@@ -18,9 +18,9 @@ from app.core.database import (
 )
 from app.schemas.paper import BatchStatusResponse, RunListItemResponse, RunResponse
 from app.services.code_skeleton import generate_skeleton_zip
-from app.services.html_exporter import build_report_html
-from app.services.latex_exporter import build_report_latex
-from app.services.pdf_exporter import build_report_pdf
+from app.services.reports.html import build_report_html
+from app.services.reports.latex import build_report_latex
+from app.services.reports.pdf import build_report_pdf
 
 router = APIRouter(
     prefix="/runs",

@@ -3,7 +3,7 @@ import logging
 from app.agents.state import PaperAnalysisState
 from app.core.database import utc_now
 from app.schemas.report import MarkdownReport
-from app.services.markdown_exporter import build_markdown_report
+from app.services.reports.markdown import build_markdown_report
 
 logger = logging.getLogger(__name__)
 

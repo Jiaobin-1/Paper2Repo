@@ -5,10 +5,10 @@ from typing import Any
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 
-from app.api.routes_papers import run_analysis_background
 from app.core.config import get_settings
 from app.core.database import create_analysis_job, create_paper, create_run, update_paper_title
 from app.schemas.paper import PaperResponse
+from app.services.analysis_runner import run_analysis_background
 from app.services.arxiv_client import (
     download_arxiv_pdf,
     fetch_arxiv_metadata,

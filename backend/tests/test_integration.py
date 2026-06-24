@@ -24,12 +24,12 @@ pytestmark = pytest.mark.skipif(
 class TestFullPipeline:
     def test_upload_and_run_produces_report(self, isolated_settings, monkeypatch):
         from app.agents.graph import run_analysis as real_run_analysis
-        from app.api import routes_papers
+        from app.services import analysis_runner
 
         def sync_run_analysis(**kwargs):
             return real_run_analysis(**kwargs)
 
-        monkeypatch.setattr(routes_papers, "run_analysis", sync_run_analysis)
+        monkeypatch.setattr(analysis_runner, "run_analysis", sync_run_analysis)
 
         pdf_bytes = SAMPLE_PDF.read_bytes()
 

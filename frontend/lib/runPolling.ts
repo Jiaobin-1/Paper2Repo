@@ -1,4 +1,5 @@
 import { getRun } from "./api";
+import { isAbortError } from "./api/client";
 import type { LanguageCode, Run } from "./types";
 
 const DEFAULT_INTERVAL_MS = 1000;
@@ -39,13 +40,16 @@ export async function pollRunUntilTerminal(
     }
 
     try {
-      const latestRun = await getRun(runId);
+      const latestRun = await getRun(runId, { signal: options.signal });
       consecutiveErrors = 0;
       handlers.onRun?.(latestRun);
       if (isTerminalRun(latestRun)) {
         return latestRun;
       }
-    } catch {
+    } catch (error) {
+      if (isAbortError(error)) {
+        throw error;
+      }
       consecutiveErrors += 1;
       if (consecutiveErrors >= maxConsecutiveErrors) {
         throw new Error(lang === "en" ? "Network connection lost. Analysis monitoring stopped." : "网络连接中断，分析监控已停止。");

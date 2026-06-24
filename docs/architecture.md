@@ -35,15 +35,17 @@ parse_pdf_node
 
 ## Main Components
 
-- `backend/app/api`: domain routers plus a single aggregated `api_router` used by the FastAPI app.
+- `backend/app/api`: thin domain routers plus a single aggregated `api_router` used by the FastAPI app. Routers own HTTP validation, status codes, and response shaping, while orchestration lives in services.
 - `backend/app/agents`: LangGraph workflow, state definition, prompts, and analysis nodes.
-- `backend/app/core`: app lifespan wiring, settings, and SQLite persistence.
+- `backend/app/core`: app lifespan wiring, settings, and compatibility facades for shared app infrastructure.
+- `backend/app/repositories`: SQLite-backed data access grouped by persistence concern. This package owns SQL queries and migration helpers; `app.core.database` remains a stable compatibility import surface.
 - `backend/app/schemas`: Pydantic contracts for analysis outputs and API responses.
-- `backend/app/services`: PDF parsing, chunking, retrieval, LLM client, report exporters, Q&A, code skeletons, and arXiv client.
+- `backend/app/services`: PDF parsing, upload handling, analysis job orchestration, chunking, retrieval, LLM client, Q&A, code skeletons, and arXiv client.
+- `backend/app/services/reports`: Markdown, PDF, HTML, and LaTeX report builders plus report formatting helpers.
 - `frontend/app`: Next.js App Router entrypoints and route-level composition.
 - `frontend/components`: reusable UI grouped by upload, report, history, knowledge, and shared concerns.
 - `frontend/hooks`: client-side language and theme hooks.
-- `frontend/lib`: API client, shared types, i18n, polling, and presentation helpers.
+- `frontend/lib`: shared types, i18n, polling, and presentation helpers. `frontend/lib/api.ts` is a stable barrel export; implementation is split by backend domain under `frontend/lib/api/`.
 
 ## Storage
 

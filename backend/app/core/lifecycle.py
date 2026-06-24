@@ -3,8 +3,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api.routes_papers import start_recoverable_analysis_jobs
 from app.core.database import init_db
+from app.services.analysis_runner import start_recoverable_analysis_jobs
 
 
 @asynccontextmanager
