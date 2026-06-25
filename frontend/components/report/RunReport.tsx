@@ -3,11 +3,11 @@
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { useAppLanguage } from "@/hooks/useAppLanguage";
-import { getReport, getReportHtmlUrl, getReportLatexUrl, getReportMarkdownUrl, getReportPdfUrl, getSkeletonUrl } from "@/lib/api";
+import { getReport, getReportHtmlUrl, getReportLatexUrl, getReportMarkdownUrl, getReportPdfUrl, getRunUsage, getSkeletonUrl } from "@/lib/api";
 import { text } from "@/lib/i18n";
 import { formatProgressMessage, formatRunStatusWithProgress } from "@/lib/runPresentation";
 import { pollRunUntilTerminal } from "@/lib/runPolling";
-import type { Report, Run } from "@/lib/types";
+import type { LlmUsageSummary, Report, Run } from "@/lib/types";
 import { WorkflowProgress } from "./RunProgress";
 import QaPanel from "./QaPanel";
 import PwcLinks from "./PwcLinks";
@@ -18,6 +18,7 @@ export default function RunReport({ runId }: { runId: string }) {
   const language = useAppLanguage();
   const [run, setRun] = useState<Run | null>(null);
   const [report, setReport] = useState<Report | null>(null);
+  const [usage, setUsage] = useState<LlmUsageSummary | null>(null);
   const [message, setMessage] = useState(text(language, "reportLoading"));
   const [fullscreen, setFullscreen] = useState(false);
 
@@ -28,6 +29,7 @@ export default function RunReport({ runId }: { runId: string }) {
     async function load() {
       try {
         setReport(null);
+        setUsage(null);
         setMessage(text(language, "reportLoading"));
         const terminalRun = await pollRunUntilTerminal(
           runId,
@@ -58,9 +60,13 @@ export default function RunReport({ runId }: { runId: string }) {
           return;
         }
 
-        const loadedReport = await getReport(runId);
+        const [loadedReport, loadedUsage] = await Promise.all([
+          getReport(runId),
+          getRunUsage(runId).catch(() => null),
+        ]);
         if (!isMounted) return;
         setReport(loadedReport);
+        setUsage(loadedUsage);
         setMessage(text(language, "reportReady"));
       } catch (error) {
         if (!isMounted) return;
@@ -90,6 +96,13 @@ export default function RunReport({ runId }: { runId: string }) {
             <h2>{text(language, "taskOverview")}</h2>
             <InfoBlock title={text(language, "taskStatus")} value={run ? formatRunStatusWithProgress(run, language) : text(language, "reportLoading")} />
             <InfoBlock title={text(language, "analysisModel")} value={run?.model_name || text(language, "notRecorded")} />
+            {usage ? <InfoBlock title={text(language, "llmTokens")} value={usage.total_tokens.toLocaleString()} /> : null}
+            {usage ? (
+              <InfoBlock
+                title={text(language, "llmEstimatedCost")}
+                value={usage.cost_estimation_configured ? `$${usage.estimated_cost_usd.toFixed(6)}` : text(language, "costRatesNotConfigured")}
+              />
+            ) : null}
             <p className="muted">{message}</p>
           </section>
           {run ? <WorkflowProgress run={run} /> : (

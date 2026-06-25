@@ -6,9 +6,11 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Query, Response
 from fastapi.responses import FileResponse
 
+from app.core.config import get_settings
 from app.core.database import (
     delete_run,
     get_analysis_result,
+    get_llm_usage_summary,
     get_report,
     get_run,
     get_runs_by_batch,
@@ -69,6 +71,22 @@ def get_run_detail(run_id: str) -> RunResponse:
     if not run:
         raise HTTPException(status_code=404, detail="Run not found.")
     return RunResponse(**run)
+
+
+@router.get(
+    "/{run_id}/usage",
+    summary="Get LLM usage for a run",
+    description="Return token totals, estimated cost, latency, and per-call usage for analysis and Q&A.",
+)
+def get_run_usage(run_id: str) -> dict:
+    if not get_run(run_id):
+        raise HTTPException(status_code=404, detail="Run not found.")
+    summary = get_llm_usage_summary(run_id)
+    settings = get_settings()
+    summary["cost_estimation_configured"] = (
+        settings.llm_input_cost_per_million > 0 or settings.llm_output_cost_per_million > 0
+    )
+    return summary
 
 
 @router.delete(

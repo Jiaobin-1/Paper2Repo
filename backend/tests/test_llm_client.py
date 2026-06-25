@@ -13,7 +13,9 @@ import pytest
 from pydantic import BaseModel
 
 from app.core.config import get_settings
+from app.core.database import create_paper, create_run, get_llm_usage_summary, init_db
 from app.services.llm_client import LLMClient, _balanced_json_from, _extract_json_object, _load_json_object
+from app.services.usage_tracking import track_llm_usage
 
 
 class _TinySchema(BaseModel):
@@ -34,12 +36,12 @@ class _FakeChoice:
 class _FakeChatResponse:
     def __init__(self, content: str) -> None:
         self.choices = [_FakeChoice(content)]
-        self.usage = {"total_tokens": 7}
+        self.usage = {"prompt_tokens": 4, "completion_tokens": 3, "total_tokens": 7}
 
 
 class _FakeResponsesResponse:
     output_text = '{"name": "responses"}'
-    usage = {"total_tokens": 5}
+    usage = {"input_tokens": 3, "output_tokens": 2, "total_tokens": 5}
 
 
 class _FakeChatCompletions:
@@ -258,6 +260,26 @@ class TestStructuredOutputModes:
         assert responses_calls[0]["text"]["format"]["type"] == "json_schema"
         assert chat_calls == []
         assert client.last_call_meta["mode"] == "responses_structured"
+
+    def test_persists_usage_and_configured_cost_for_run(self, isolated_settings, monkeypatch):
+        monkeypatch.setenv("LLM_INPUT_COST_PER_MILLION", "10")
+        monkeypatch.setenv("LLM_OUTPUT_COST_PER_MILLION", "20")
+        client = _configured_client(monkeypatch, isolated_settings)
+        monkeypatch.setattr(client, "client", lambda: _FakeClient([], []))
+        init_db()
+        pdf_path = isolated_settings / "paper.pdf"
+        pdf_path.write_bytes(b"%PDF-1.4\n%%EOF")
+        paper = create_paper("paper.pdf", pdf_path, pdf_path.stat().st_size)
+        run = create_run(paper["id"])
+
+        with track_llm_usage(run["id"]):
+            client.structured_output(system_prompt="system", user_prompt="user", schema_model=_TinySchema)
+
+        summary = get_llm_usage_summary(run["id"])
+        assert summary["call_count"] == 1
+        assert summary["input_tokens"] == 3
+        assert summary["output_tokens"] == 2
+        assert summary["estimated_cost_usd"] == 0.00007
 
     def test_falls_back_to_chat_structured_when_responses_fails(self, isolated_settings, monkeypatch):
         responses_calls: list[dict] = []

@@ -89,6 +89,28 @@ def test_upload_accepts_valid_pdf_and_start_run_success(isolated_settings, monke
     assert run["updated_at"]
 
 
+def test_start_run_returns_503_and_rolls_back_when_analysis_queue_is_full(isolated_settings, monkeypatch):
+    from app.services import analysis_runner
+
+    def reject_submission(*_args, **_kwargs):
+        raise analysis_runner.AnalysisQueueFullError("Analysis queue is full. Please retry later.")
+
+    monkeypatch.setattr(analysis_runner, "submit_analysis", reject_submission)
+
+    with _client() as client:
+        upload_response = client.post(
+            "/api/papers/upload",
+            files={"file": ("paper.pdf", b"%PDF-1.4\n%%EOF", "application/pdf")},
+        )
+        paper_id = upload_response.json()["id"]
+        response = client.post(f"/api/papers/{paper_id}/runs")
+        runs_response = client.get(f"/api/papers/{paper_id}/runs")
+
+    assert response.status_code == 503
+    assert response.headers["retry-after"] == "5"
+    assert runs_response.json() == []
+
+
 def test_delete_completed_run_removes_it_from_api(isolated_settings, monkeypatch):
     from app.services import analysis_runner
 

@@ -30,7 +30,7 @@ jobs:
 
       - name: Lint with ruff
         working-directory: backend
-        run: python -m ruff check app/ tests/
+        run: python -m ruff check app/ tests/ scripts/
 
       - name: Type check with mypy
         working-directory: backend
@@ -39,6 +39,10 @@ jobs:
       - name: Run tests
         working-directory: backend
         run: python -m pytest tests/ -v
+
+      - name: Run deterministic report-quality benchmark
+        working-directory: backend
+        run: python -m scripts.run_quality_benchmark
 
   frontend:
     runs-on: ubuntu-latest

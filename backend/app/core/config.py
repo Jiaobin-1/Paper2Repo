@@ -24,14 +24,23 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o-mini"
     openai_model_options: str = ""
     openai_timeout_seconds: float = 60.0
+    llm_input_cost_per_million: float = 0.0
+    llm_output_cost_per_million: float = 0.0
 
     database_url: str = "sqlite:///./data/paper2repo.db"
     upload_dir: str = "./storage/uploads"
     report_dir: str = "./storage/reports"
     upload_max_mb: int = 50
     pdf_max_pages: int = 300
+    pdf_ocr_enabled: bool = True
+    pdf_ocr_min_chars: int = 80
+    pdf_ocr_language: str = "eng"
+    pdf_ocr_dpi: int = 150
+    pdf_extract_tables: bool = True
+    pdf_extract_formulas: bool = True
     run_stale_after_minutes: int = 60
     analysis_max_workers: int = 3
+    analysis_max_queued_jobs: int = 20
     analysis_job_lease_seconds: int = 3600
     analysis_job_max_attempts: int = 2
     analysis_recovery_interval_seconds: int = 30

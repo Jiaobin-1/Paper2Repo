@@ -198,3 +198,28 @@ export type BatchStatusResponse = {
   batch_id: string;
   runs: RunListItem[];
 };
+
+export type LlmUsageEvent = {
+  model: string;
+  mode: string;
+  operation: string;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  estimated_cost_usd: number;
+  latency_ms: number;
+  attempts: number;
+  created_at: string;
+};
+
+export type LlmUsageSummary = {
+  run_id: string;
+  call_count: number;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  estimated_cost_usd: number;
+  latency_ms: number;
+  cost_estimation_configured: boolean;
+  events: LlmUsageEvent[];
+};

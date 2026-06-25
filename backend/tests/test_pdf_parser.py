@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from app.services.pdf_parser import parse_pdf
+from app.services.pdf_parser import _extract_formula_lines, _extract_page_text, _table_to_markdown, parse_pdf
 
 FIXTURES = Path(__file__).parent / "fixtures"
 SAMPLE_PDF = FIXTURES / "sample.pdf"
@@ -58,3 +58,41 @@ class TestParsePdf:
 
         with pytest.raises(RuntimeError, match="exceeding the configured limit of 1"):
             parse_pdf(path, max_pages=1)
+
+
+def test_table_rows_are_normalized_to_markdown():
+    markdown = _table_to_markdown([["Dataset", "F1"], ["Sample|Bench", 0.91]])
+
+    assert "| Dataset | F1 |" in markdown
+    assert "Sample\\|Bench" in markdown
+    assert "| --- | --- |" in markdown
+
+
+def test_formula_detection_keeps_equations_and_rejects_prose():
+    formulas = _extract_formula_lines(
+        "The model is effective on benchmarks.\nloss = -log p(y|x) (1)\nx = W h + b\n"
+    )
+
+    assert "loss = -log p(y|x) (1)" in formulas
+    assert "x = W h + b" in formulas
+    assert all("effective" not in formula for formula in formulas)
+
+
+def test_sparse_page_uses_optional_ocr_when_it_improves_text():
+    class Settings:
+        pdf_ocr_enabled = True
+        pdf_ocr_min_chars = 80
+        pdf_ocr_language = "eng"
+        pdf_ocr_dpi = 150
+
+    class Page:
+        def get_text(self, _kind, textpage=None):
+            return "Recognized text from a scanned research paper." if textpage else ""
+
+        def get_textpage_ocr(self, **_kwargs):
+            return object()
+
+    text, method = _extract_page_text(Page(), Settings())
+
+    assert method == "ocr"
+    assert "Recognized text" in text

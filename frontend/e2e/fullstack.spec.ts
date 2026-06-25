@@ -20,4 +20,6 @@ test("uploads a real PDF and renders the generated report", async ({ page }) => 
   await analyzeButton.click();
   await expect(page.locator(".report-viewer")).toBeVisible({ timeout: 45000 });
   await expect(page.locator(".report-viewer .markdown-body h1")).toBeVisible();
+  await page.locator('.report-viewer a[href^="/runs/"]').click();
+  await expect(page.getByText("模型 Token")).toBeVisible();
 });

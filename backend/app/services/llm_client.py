@@ -11,6 +11,7 @@ from openai import OpenAI
 from pydantic import BaseModel
 
 from app.core.config import get_settings
+from app.services.usage_tracking import record_llm_usage
 
 SchemaT = TypeVar("SchemaT", bound=BaseModel)
 logger = logging.getLogger(__name__)
@@ -23,7 +24,7 @@ class LLMClient:
     def __init__(self, model_name: str | None = None) -> None:
         self.settings = get_settings()
         self.model_name = model_name or self.settings.openai_model
-        self.last_call_meta: dict[str, object] = {}
+        self.last_call_meta: dict[str, Any] = {}
 
     def is_configured(self) -> bool:
         return bool(self.settings.openai_api_key)
@@ -127,9 +128,9 @@ class LLMClient:
                 }
             },
         )
+        self._record_call("responses_structured", schema_model, response, start, attempts)
         content = _response_output_text(response)
         result = schema_model.model_validate(_load_json_object(content))
-        self._record_call("responses_structured", schema_model, response, start, attempts)
         return result
 
     def _structured_output_chat_schema(
@@ -159,6 +160,7 @@ class LLMClient:
                 {"role": "user", "content": user_prompt},
             ],
         )
+        self._record_call("chat_structured", schema_model, response, start, attempts)
         if not response.choices:
             raise RuntimeError("LLM returned an empty response with no choices.")
         message = response.choices[0].message
@@ -166,7 +168,6 @@ class LLMClient:
             raise RuntimeError(f"LLM refused structured output: {message.refusal}")
         content = message.content or "{}"
         result = schema_model.model_validate(_load_json_object(content))
-        self._record_call("chat_structured", schema_model, response, start, attempts)
         return result
 
     def _structured_output_json_legacy(
@@ -199,11 +200,11 @@ class LLMClient:
         if self._is_official_openai_base_url():
             kwargs["store"] = False
         response = self.client().chat.completions.create(**kwargs)  # type: ignore[call-overload]
+        self._record_call("chat_json_legacy", schema_model, response, start, attempts)
         if not response.choices:
             raise RuntimeError("LLM returned an empty response with no choices.")
         content = response.choices[0].message.content or "{}"
         result = schema_model.model_validate(_load_json_object(content))
-        self._record_call("chat_json_legacy", schema_model, response, start, attempts)
         return result
 
     def chat(
@@ -213,6 +214,7 @@ class LLMClient:
         messages: list[dict[str, str]],
         temperature: float = 0.3,
     ) -> str:
+        start = time.perf_counter()
         full_messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
         full_messages.extend(messages)
         kwargs: dict[str, Any] = {
@@ -223,6 +225,7 @@ class LLMClient:
         if self._is_official_openai_base_url():
             kwargs["store"] = False
         response = self.client().chat.completions.create(**kwargs)  # type: ignore[call-overload]
+        self._record_call("chat", "chat", response, start, 1)
         if not response.choices:
             raise RuntimeError("LLM returned an empty response with no choices.")
         return response.choices[0].message.content or ""
@@ -234,6 +237,7 @@ class LLMClient:
         messages: list[dict[str, str]],
         temperature: float = 0.3,
     ) -> Generator[str, None, None]:
+        start = time.perf_counter()
         full_messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
         full_messages.extend(messages)
         kwargs: dict[str, Any] = {
@@ -244,10 +248,18 @@ class LLMClient:
         }
         if self._is_official_openai_base_url():
             kwargs["store"] = False
+            kwargs["stream_options"] = {"include_usage": True}
         stream = self.client().chat.completions.create(**kwargs)  # type: ignore[call-overload]
-        for chunk in stream:
-            if chunk.choices and chunk.choices[0].delta.content:
-                yield chunk.choices[0].delta.content
+        usage: dict | None = None
+        try:
+            for chunk in stream:
+                chunk_usage = _usage_dict(getattr(chunk, "usage", None))
+                if chunk_usage:
+                    usage = chunk_usage
+                if chunk.choices and chunk.choices[0].delta.content:
+                    yield chunk.choices[0].delta.content
+        finally:
+            self._record_meta("chat_stream", "chat_stream", usage, start, 1)
 
     def _supports_responses_api(self) -> bool:
         return self._is_official_openai_base_url() and hasattr(self.client(), "responses")
@@ -258,20 +270,32 @@ class LLMClient:
     def _record_call(
         self,
         mode: str,
-        schema_model: type[BaseModel],
+        schema_model: type[BaseModel] | str,
         response,
+        start: float,
+        attempts: int,
+    ) -> None:
+        schema_name = schema_model if isinstance(schema_model, str) else schema_model.__name__
+        self._record_meta(mode, schema_name, _usage_dict(getattr(response, "usage", None)), start, attempts)
+
+    def _record_meta(
+        self,
+        mode: str,
+        schema_name: str,
+        usage: dict | None,
         start: float,
         attempts: int,
     ) -> None:
         self.last_call_meta = {
             "mode": mode,
             "model": self.model_name,
-            "schema": schema_model.__name__,
+            "schema": schema_name,
             "attempts": attempts,
             "latency_ms": round((time.perf_counter() - start) * 1000, 2),
-            "usage": _usage_dict(getattr(response, "usage", None)),
+            "usage": usage,
         }
-        logger.info("LLM structured call completed", extra={"llm_call": self.last_call_meta})
+        record_llm_usage(self.last_call_meta)
+        logger.info("LLM call completed", extra={"llm_call": self.last_call_meta})
 
     def _record_structured_failure(
         self,

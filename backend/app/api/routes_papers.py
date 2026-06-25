@@ -8,12 +8,13 @@ from app.core.database import (
     create_batch_id,
     create_paper,
     create_run,
+    delete_run,
     get_paper,
     list_papers,
     list_runs,
 )
 from app.schemas.paper import BatchStartResponse, BatchUploadResponse, PaperResponse, RunListItemResponse, RunResponse
-from app.services.analysis_runner import AnalysisRunRequest, submit_analysis, submit_batch_analysis
+from app.services import analysis_runner
 from app.services.uploads import save_pdf_upload, save_pdf_uploads
 
 router = APIRouter(
@@ -85,7 +86,11 @@ def start_run(paper_id: str) -> RunResponse:
 
     run = create_run(paper_id)
     create_analysis_job(run["id"], paper_id)
-    submit_analysis(paper_id, run["id"], paper["file_path"], run.get("model_name"))
+    try:
+        analysis_runner.submit_analysis(paper_id, run["id"], paper["file_path"], run.get("model_name"))
+    except analysis_runner.AnalysisQueueFullError as exc:
+        delete_run(run["id"])
+        raise HTTPException(status_code=503, detail=str(exc), headers={"Retry-After": "5"}) from exc
     return RunResponse(**run)
 
 
@@ -119,7 +124,7 @@ def upload_batch(files: list[UploadFile] = File(...)) -> BatchUploadResponse:
     "/batch-start",
     response_model=BatchStartResponse,
     summary="Start batch analysis",
-    description="Start parallel analysis for multiple papers. Uses thread pool with max 3 workers.",
+    description="Start parallel analysis for multiple papers using the configured bounded worker queue.",
 )
 def start_batch(
     paper_ids: str = Query(..., description="Comma-separated paper IDs"),
@@ -130,16 +135,20 @@ def start_batch(
 
     batch_id = create_batch_id()
     runs: list[RunResponse] = []
-    tasks: list[AnalysisRunRequest] = []
+    tasks: list[analysis_runner.AnalysisRunRequest] = []
+    papers = []
 
     for pid in ids:
         paper = get_paper(pid)
         if not paper:
             raise HTTPException(status_code=404, detail=f"Paper not found: {pid}")
+        papers.append((pid, paper))
+
+    for pid, paper in papers:
         run = create_run(pid, batch_id=batch_id)
         create_analysis_job(run["id"], pid)
         tasks.append(
-            AnalysisRunRequest(
+            analysis_runner.AnalysisRunRequest(
                 paper_id=pid,
                 run_id=run["id"],
                 pdf_path=paper["file_path"],
@@ -148,5 +157,10 @@ def start_batch(
         )
         runs.append(RunResponse(**run))
 
-    submit_batch_analysis(tasks)
+    try:
+        analysis_runner.submit_batch_analysis(tasks)
+    except analysis_runner.AnalysisQueueFullError as exc:
+        for run_response in runs:
+            delete_run(run_response.id)
+        raise HTTPException(status_code=503, detail=str(exc), headers={"Retry-After": "5"}) from exc
     return BatchStartResponse(batch_id=batch_id, runs=runs)

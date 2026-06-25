@@ -18,11 +18,14 @@ Start the backend and open `http://127.0.0.1:8000/docs` for Swagger UI.
 - `GET /api/papers/{paper_id}/runs`: list runs for one paper.
 - `POST /api/papers/{paper_id}/runs`: start one analysis run.
 
+Analysis-start endpoints return `503 Service Unavailable` with `Retry-After: 5` when both active-worker and waiting-job capacity are exhausted.
+
 ## Runs And Reports
 
 - `GET /api/runs`: list runs, optionally `paper_id` and `limit`.
 - `GET /api/runs/batches/{batch_id}`: get batch status.
 - `GET /api/runs/{run_id}`: get run status.
+- `GET /api/runs/{run_id}/usage`: get LLM token totals, estimated cost, latency, and per-call details.
 - `DELETE /api/runs/{run_id}`: delete a completed or failed run.
 - `POST /api/runs/{run_id}/cancel`: cancel a pending or running run.
 - `GET /api/runs/{run_id}/analysis`: get structured analysis JSON.

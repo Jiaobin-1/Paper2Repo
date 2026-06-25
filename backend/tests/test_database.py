@@ -16,11 +16,13 @@ from app.core.database import (
     fail_analysis_job,
     get_analysis_job,
     get_connection,
+    get_llm_usage_summary,
     get_run,
     init_db,
     list_recoverable_analysis_jobs,
     recover_stale_runs,
     request_analysis_cancel,
+    save_llm_usage_events,
     update_run_status,
 )
 
@@ -73,6 +75,50 @@ def test_foreign_keys_reject_orphan_run(isolated_settings):
             """,
             ("orphan", "missing-paper", "pending", "queued", 0, now, now, now),
         )
+
+
+def test_llm_usage_summary_aggregates_tokens_cost_and_latency(isolated_settings):
+    init_db()
+    pdf_path = isolated_settings / "paper.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4\n%%EOF")
+    paper = create_paper("paper.pdf", pdf_path, pdf_path.stat().st_size)
+    run = create_run(paper["id"])
+    save_llm_usage_events(
+        run["id"],
+        [
+            {
+                "model": "test-model",
+                "mode": "responses_structured",
+                "operation": "PaperMetadata",
+                "input_tokens": 100,
+                "output_tokens": 25,
+                "total_tokens": 125,
+                "estimated_cost_usd": 0.0002,
+                "latency_ms": 50,
+                "attempts": 1,
+            },
+            {
+                "model": "test-model",
+                "mode": "chat",
+                "operation": "chat",
+                "input_tokens": 20,
+                "output_tokens": 10,
+                "total_tokens": 30,
+                "estimated_cost_usd": 0.0001,
+                "latency_ms": 25,
+                "attempts": 1,
+            },
+        ],
+    )
+
+    summary = get_llm_usage_summary(run["id"])
+
+    assert summary["call_count"] == 2
+    assert summary["input_tokens"] == 120
+    assert summary["output_tokens"] == 35
+    assert summary["total_tokens"] == 155
+    assert summary["estimated_cost_usd"] == 0.0003
+    assert summary["latency_ms"] == 75
 
 
 def test_init_db_migrates_existing_analysis_runs_without_updated_at(isolated_settings):

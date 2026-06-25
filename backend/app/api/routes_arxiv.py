@@ -7,9 +7,9 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.core.config import get_settings
-from app.core.database import create_analysis_job, create_paper, create_run, update_paper_title
+from app.core.database import create_analysis_job, create_paper, create_run, delete_run, update_paper_title
 from app.schemas.paper import PaperResponse
-from app.services.analysis_runner import submit_analysis
+from app.services import analysis_runner
 from app.services.arxiv_client import (
     download_arxiv_pdf,
     fetch_arxiv_metadata,
@@ -69,7 +69,11 @@ def import_arxiv(
 
     run = create_run(paper["id"])
     create_analysis_job(run["id"], paper["id"])
-    submit_analysis(paper["id"], run["id"], str(pdf_path), run.get("model_name"))
+    try:
+        analysis_runner.submit_analysis(paper["id"], run["id"], str(pdf_path), run.get("model_name"))
+    except analysis_runner.AnalysisQueueFullError as exc:
+        delete_run(run["id"])
+        raise HTTPException(status_code=503, detail=str(exc), headers={"Retry-After": "5"}) from exc
 
     return PaperResponse(**paper)
 
@@ -131,7 +135,11 @@ def compare_versions(
             )
             run = create_run(paper["id"])
             create_analysis_job(run["id"], paper["id"])
-            submit_analysis(paper["id"], run["id"], str(pdf_path), run.get("model_name"))
+            try:
+                analysis_runner.submit_analysis(paper["id"], run["id"], str(pdf_path), run.get("model_name"))
+            except analysis_runner.AnalysisQueueFullError:
+                delete_run(run["id"])
+                raise
             results[label] = {
                 "paper_id": paper["id"],
                 "run_id": run["id"],

@@ -136,6 +136,22 @@ def init_db() -> None:
                 FOREIGN KEY (run_id) REFERENCES analysis_runs(id),
                 FOREIGN KEY (paper_id) REFERENCES papers(id)
             );
+
+            CREATE TABLE IF NOT EXISTS llm_usage_events (
+                id TEXT PRIMARY KEY,
+                run_id TEXT NOT NULL,
+                model TEXT NOT NULL,
+                mode TEXT NOT NULL,
+                operation TEXT NOT NULL,
+                input_tokens INTEGER NOT NULL DEFAULT 0,
+                output_tokens INTEGER NOT NULL DEFAULT 0,
+                total_tokens INTEGER NOT NULL DEFAULT 0,
+                estimated_cost_usd REAL NOT NULL DEFAULT 0,
+                latency_ms REAL NOT NULL DEFAULT 0,
+                attempts INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (run_id) REFERENCES analysis_runs(id)
+            );
             """
         )
         _ensure_analysis_run_columns(conn)
@@ -220,5 +236,7 @@ def _ensure_indexes(conn: sqlite3.Connection) -> None:
             ON qa_messages(run_id, created_at);
         CREATE INDEX IF NOT EXISTS idx_citations_run_index
             ON citations(run_id, citation_index);
+        CREATE INDEX IF NOT EXISTS idx_llm_usage_run_created
+            ON llm_usage_events(run_id, created_at);
         """
     )

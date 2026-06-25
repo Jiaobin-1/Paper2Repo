@@ -51,6 +51,7 @@ from app.repositories.settings import (
     set_theme,
     set_ui_language,
 )
+from app.repositories.usage import get_llm_usage_summary, save_llm_usage_events
 
 __all__ = [
     "DEFAULT_MODEL_SETTING_KEY",
@@ -83,6 +84,7 @@ __all__ = [
     "get_qa_history",
     "get_report",
     "get_report_language",
+    "get_llm_usage_summary",
     "get_run",
     "get_runs_by_batch",
     "get_theme",
@@ -100,6 +102,7 @@ __all__ = [
     "save_embeddings",
     "save_qa_message",
     "save_report",
+    "save_llm_usage_events",
     "set_app_setting",
     "set_default_model",
     "set_report_language",

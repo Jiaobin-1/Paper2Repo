@@ -104,10 +104,16 @@ PDF / arXiv
 | `OPENAI_MODEL` | Default model for new runs | `gpt-4o-mini` |
 | `OPENAI_MODEL_OPTIONS` | Comma-separated model options | `gpt-4o-mini,gpt-4o,deepseek-chat` |
 | `OPENAI_TIMEOUT_SECONDS` | LLM request timeout | `60` |
+| `LLM_INPUT_COST_PER_MILLION` | Input-token price used for cost estimates | `0` |
+| `LLM_OUTPUT_COST_PER_MILLION` | Output-token price used for cost estimates | `0` |
 | `DATABASE_URL` | SQLite database URL | `sqlite:///./data/paper2repo.db` |
 | `UPLOAD_MAX_MB` | Single upload size limit | `50` |
 | `PDF_MAX_PAGES` | Maximum pages parsed from one PDF | `300` |
+| `PDF_OCR_ENABLED` | OCR sparse/scanned pages when local Tesseract support is available | `true` |
+| `PDF_EXTRACT_TABLES` | Add detected tables to retrieval chunks | `true` |
+| `PDF_EXTRACT_FORMULAS` | Add formula-like lines to retrieval chunks | `true` |
 | `ANALYSIS_MAX_WORKERS` | Shared worker limit for all analysis runs | `3` |
+| `ANALYSIS_MAX_QUEUED_JOBS` | Maximum waiting jobs beyond active workers | `20` |
 | `ANALYSIS_JOB_LEASE_SECONDS` | Worker lease before an interrupted job can be reclaimed | `3600` |
 | `ANALYSIS_RECOVERY_INTERVAL_SECONDS` | Periodic interrupted-job recovery interval | `30` |
 
@@ -140,9 +146,10 @@ Paper2Repo/
 
 ```bash
 cd backend
-python -m ruff check app tests
+python -m ruff check app tests scripts
 python -m mypy app --ignore-missing-imports
 python -m pytest tests -q
+python -m scripts.run_quality_benchmark
 
 cd ../frontend
 npm run lint
@@ -153,7 +160,7 @@ npm run test:e2e
 
 Current local verification baseline:
 
-- `pytest`: 197 tests
+- `pytest`: 206 tests
 - `vitest`: 42 tests
 - `Playwright`: 21 mocked UI tests plus 1 real frontend-backend flow
 
@@ -166,6 +173,10 @@ npm run test:e2e:fullstack
 
 If the backend dependencies live in the documented Conda environment, set
 `FULLSTACK_BACKEND_COMMAND="conda run -n agent-learning python -m uvicorn app.main:app --host 127.0.0.1 --port 8000"`.
+
+The deterministic quality benchmark uses the local fallback pipeline and exits non-zero when a checked-in paper case falls below its configured score. Add cases in `backend/benchmarks/quality_cases.json` as report expectations mature.
+
+Docker includes English and Simplified Chinese Tesseract data. Manual installations need a local Tesseract runtime for OCR; set `PDF_OCR_LANGUAGE=eng+chi_sim` when both languages are required. OCR failure never blocks native PDF text extraction.
 
 ## Repository Hygiene
 

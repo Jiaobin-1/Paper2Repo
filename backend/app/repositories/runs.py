@@ -130,6 +130,7 @@ def delete_run(run_id: str) -> dict[str, Any] | None:
         return None
     with get_connection() as conn:
         conn.execute("DELETE FROM analysis_jobs WHERE run_id = ?", (run_id,))
+        conn.execute("DELETE FROM llm_usage_events WHERE run_id = ?", (run_id,))
         conn.execute("DELETE FROM qa_messages WHERE run_id = ?", (run_id,))
         conn.execute("DELETE FROM citations WHERE run_id = ?", (run_id,))
         conn.execute("DELETE FROM reports WHERE run_id = ?", (run_id,))

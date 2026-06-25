@@ -22,6 +22,12 @@ def _split_text(text: str, max_chars: int) -> list[str]:
     chunks: list[str] = []
     current = ""
     for paragraph in [part.strip() for part in text.split("\n\n") if part.strip()]:
+        if len(paragraph) > max_chars:
+            if current:
+                chunks.append(current.strip())
+                current = ""
+            chunks.extend(paragraph[i : i + max_chars] for i in range(0, len(paragraph), max_chars))
+            continue
         if current and len(current) + len(paragraph) + 2 > max_chars:
             chunks.append(current.strip())
             current = paragraph
@@ -31,8 +37,6 @@ def _split_text(text: str, max_chars: int) -> list[str]:
     if current:
         chunks.append(current.strip())
 
-    if not chunks:
-        chunks = [text[i : i + max_chars] for i in range(0, len(text), max_chars)]
     return chunks
 
 
@@ -41,7 +45,7 @@ def chunk_parsed_paper(parsed: ParsedPaper, max_chars: int = 2500) -> ChunkedPap
     chunk_index = 0
 
     for page in parsed.page_texts:
-        text = page.text.strip()
+        text = _page_content(page)
         if not text:
             continue
         section_title = _section_for_page(parsed.section_candidates, page.page_number)
@@ -61,3 +65,13 @@ def chunk_parsed_paper(parsed: ParsedPaper, max_chars: int = 2500) -> ChunkedPap
             chunk_index += 1
 
     return ChunkedPaper(chunks=chunks, chunk_count=len(chunks))
+
+
+def _page_content(page) -> str:
+    blocks = [page.text.strip()]
+    if page.tables:
+        blocks.append("Extracted tables:\n\n" + "\n\n".join(page.tables))
+    if page.formulas:
+        formula_lines = "\n".join(f"- {formula}" for formula in page.formulas)
+        blocks.append(f"Detected formulas:\n{formula_lines}")
+    return "\n\n".join(block for block in blocks if block).strip()

@@ -3,6 +3,8 @@ from __future__ import annotations
 import threading
 import time
 
+import pytest
+
 from app.core.config import get_settings
 from app.core.database import (
     claim_analysis_job,
@@ -209,6 +211,47 @@ def test_shared_dispatcher_limits_concurrent_analysis(isolated_settings, monkeyp
         analysis_runner.stop_analysis_dispatcher()
 
     assert maximum_active == 2
+
+
+def test_dispatcher_rejects_work_when_running_and_queue_slots_are_full(isolated_settings, monkeypatch):
+    monkeypatch.setenv("ANALYSIS_MAX_WORKERS", "1")
+    monkeypatch.setenv("ANALYSIS_MAX_QUEUED_JOBS", "1")
+    get_settings.cache_clear()
+    analysis_runner.stop_analysis_dispatcher()
+    init_db()
+    started = threading.Event()
+    release = threading.Event()
+
+    def fake_run_analysis(**kwargs):
+        started.set()
+        release.wait(timeout=2)
+        kwargs["progress_callback"]("persist_result_node", 99)
+
+    monkeypatch.setattr(analysis_runner, "run_analysis", fake_run_analysis)
+    submissions = []
+    runs = []
+    for index in range(3):
+        pdf_path = isolated_settings / f"queued-{index}.pdf"
+        pdf_path.write_bytes(b"%PDF-1.4\n%%EOF")
+        paper = create_paper(pdf_path.name, pdf_path, pdf_path.stat().st_size)
+        run = create_run(paper["id"])
+        create_analysis_job(run["id"], paper["id"])
+        runs.append((paper, run, pdf_path))
+
+    try:
+        paper, run, pdf_path = runs[0]
+        submissions.append(analysis_runner.submit_analysis(paper["id"], run["id"], str(pdf_path), "test-model"))
+        assert started.wait(timeout=1)
+        paper, run, pdf_path = runs[1]
+        submissions.append(analysis_runner.submit_analysis(paper["id"], run["id"], str(pdf_path), "test-model"))
+        paper, run, pdf_path = runs[2]
+        with pytest.raises(analysis_runner.AnalysisQueueFullError):
+            analysis_runner.submit_analysis(paper["id"], run["id"], str(pdf_path), "test-model")
+    finally:
+        release.set()
+        for future in submissions:
+            future.result(timeout=2)
+        analysis_runner.stop_analysis_dispatcher()
 
 
 def test_expired_job_is_recovered_after_interrupted_worker(isolated_settings, monkeypatch):

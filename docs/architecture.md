@@ -49,7 +49,7 @@ parse_pdf_node
 
 ## Storage
 
-- SQLite stores papers, chunks, runs, jobs, analysis JSON, reports, settings, Q&A messages, citations, and embeddings.
+- SQLite stores papers, chunks, runs, jobs, analysis JSON, reports, settings, Q&A messages, citations, embeddings, and per-run LLM usage events.
 - Uploaded PDFs and generated reports are local files under configurable storage directories.
 - Markdown reports are persisted; PDF, HTML, and LaTeX downloads are generated from stored Markdown content.
 - Embeddings are stored in SQLite for local knowledge search; retrieval uses a hybrid semantic/keyword score.
@@ -57,9 +57,16 @@ parse_pdf_node
 ## Background Jobs
 
 - Each run creates a recoverable analysis job.
-- Single, batch, arXiv, and recovered runs share one bounded worker pool controlled by `ANALYSIS_MAX_WORKERS`.
+- Single, batch, arXiv, and recovered runs share one worker pool controlled by `ANALYSIS_MAX_WORKERS`; `ANALYSIS_MAX_QUEUED_JOBS` bounds additional waiting work and overloaded start requests return `503`.
 - Leases are renewed at workflow progress boundaries; startup and periodic recovery reclaim interrupted jobs that are safe to retry.
 - Pending/running runs can be canceled through the API, and cancellation is checked before a run can be finalized as completed.
+
+## PDF Extraction And Quality Gates
+
+- Native PyMuPDF text remains the primary source. Sparse pages optionally use local Tesseract OCR and degrade to native text when OCR is unavailable.
+- Detected tables are normalized to Markdown and formula-like lines are added as labeled retrieval content without contaminating front-matter metadata extraction.
+- `python -m scripts.run_quality_benchmark` runs checked-in deterministic paper cases and is a CI quality gate.
+- LLM calls made during analysis and Q&A persist token, latency, and configurable cost estimates per run; the report sidebar and `/api/runs/{run_id}/usage` expose the totals.
 
 ## Frontend Runtime
 
