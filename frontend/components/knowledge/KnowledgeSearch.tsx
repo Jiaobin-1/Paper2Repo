@@ -49,6 +49,7 @@ export default function KnowledgeSearch() {
       <div className="knowledge-search-row">
         <input
           className="input"
+          aria-label={text(language, "knowledgeSearch")}
           placeholder={text(language, "knowledgeSearch")}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -60,7 +61,8 @@ export default function KnowledgeSearch() {
         </button>
       </div>
 
-      {error ? <p className="qa-error">{error}</p> : null}
+      <div aria-live="polite" aria-busy={loading} className="stack">
+      {error ? <p className="qa-error" role="alert">{error}</p> : null}
 
       {loading ? (
         <div className="loading-state">
@@ -109,6 +111,7 @@ export default function KnowledgeSearch() {
           ))}
         </div>
       ))}
+      </div>
     </div>
   );
 }

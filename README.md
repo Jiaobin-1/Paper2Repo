@@ -15,6 +15,7 @@ Paper2Repo reads papers with reproduction in mind. Upload a PDF or import an arX
 - **Reproduction-first:** built for paper understanding, method audit, experiment audit, and reproduction planning, not generic summarization.
 - **Local-first:** FastAPI + Next.js + LangGraph + SQLite, with Docker Compose for quick local trials.
 - **Agent workflow:** LangGraph coordinates parsing, evidence extraction, structured analysis, report generation, and Q&A.
+- **Quality-gated:** report structure, evidence coverage, export routes, and upload-to-report flows are covered by backend and browser tests.
 
 ## Quick Start
 
@@ -73,6 +74,7 @@ curl http://127.0.0.1:8000/health
 | Method and experiment audit | Modules, datasets, metrics, baselines, protocols, missing details |
 | Reproduction planning | Minimum reproduction goal, scope, risks, checklist, code skeleton |
 | Local workspace features | Batch analysis, arXiv import, Q&A, citations, knowledge search, comparison |
+| Workspace maintenance | Delete papers and clean related runs, reports, chunks, embeddings, citations, Q&A, and local files |
 
 ## Why Not Just Use a PDF Summarizer?
 
@@ -94,6 +96,10 @@ PDF / arXiv
   -> plan reproduction
   -> export report and code skeleton
 ```
+
+## Local Data Management
+
+Paper2Repo stores uploaded PDFs, generated Markdown reports, analysis JSON, chunks, embeddings, citations, and Q&A history locally. Completed or failed papers can be deleted from the API; deletion removes the paper, its analysis runs, stored knowledge artifacts, generated reports, and local upload/report files. Papers with pending or running analyses are protected from deletion until the analysis finishes or fails.
 
 ## Configuration
 
@@ -162,9 +168,9 @@ npm run test:e2e
 
 Current local verification baseline:
 
-- `pytest`: 222 tests
+- `pytest`: 242 tests
 - `vitest`: 43 tests
-- `Playwright`: 21 mocked UI tests plus 1 real frontend-backend flow
+- `Playwright`: 22 mocked UI tests plus 1 real frontend-backend flow
 
 Run the real full-stack flow locally with a Python environment that has the backend dependencies installed:
 
@@ -183,6 +189,8 @@ The Settings page exposes local storage usage and can clean orphan upload/report
 `API_AUTH_TOKEN` is opt-in. Leave it empty for the local browser UI. When set, every `/api/*` request must send `Authorization: Bearer <token>`; this mode is intended for a reverse proxy that injects the header or for programmatic clients, because ordinary browser download links cannot attach it.
 
 Docker includes English and Simplified Chinese Tesseract data. Manual installations need a local Tesseract runtime for OCR; set `PDF_OCR_LANGUAGE=eng+chi_sim` when both languages are required. OCR failure never blocks native PDF text extraction.
+
+Quality coverage includes report quality gates, export route checks, database cleanup checks, and a browser-level upload -> analysis -> report rendering flow.
 
 ## Repository Hygiene
 

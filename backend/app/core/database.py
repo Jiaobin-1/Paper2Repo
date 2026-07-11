@@ -19,7 +19,16 @@ from app.repositories.knowledge import (
     save_embeddings,
 )
 from app.repositories.migrations import init_db
-from app.repositories.papers import create_paper, get_paper, list_papers, update_paper_title
+from app.repositories.papers import (
+    PaperDeletionResult,
+    create_paper,
+    delete_paper,
+    get_paper,
+    get_paper_storage_paths,
+    list_papers,
+    paper_has_active_runs,
+    update_paper_title,
+)
 from app.repositories.qa import get_qa_history, save_qa_message
 from app.repositories.reports import get_analysis_result, get_report, save_analysis_result, save_report
 from app.repositories.runs import (
@@ -55,6 +64,7 @@ from app.repositories.usage import get_llm_usage_summary, save_llm_usage_events
 
 __all__ = [
     "DEFAULT_MODEL_SETTING_KEY",
+    "PaperDeletionResult",
     "REPORT_LANGUAGE_SETTING_KEY",
     "STALE_RUN_ERROR_MESSAGE",
     "SUPPORTED_LANGUAGES",
@@ -70,6 +80,7 @@ __all__ = [
     "create_paper",
     "create_run",
     "delete_embeddings",
+    "delete_paper",
     "delete_run",
     "fail_analysis_job",
     "get_all_embeddings",
@@ -79,12 +90,13 @@ __all__ = [
     "get_citations_for_run",
     "get_connection",
     "get_default_model",
+    "get_llm_usage_summary",
     "get_paper",
     "get_paper_chunks",
+    "get_paper_storage_paths",
     "get_qa_history",
     "get_report",
     "get_report_language",
-    "get_llm_usage_summary",
     "get_run",
     "get_runs_by_batch",
     "get_theme",
@@ -94,15 +106,16 @@ __all__ = [
     "list_papers",
     "list_recoverable_analysis_jobs",
     "list_runs",
+    "paper_has_active_runs",
     "recover_stale_runs",
     "renew_analysis_job_lease",
     "replace_chunks",
     "request_analysis_cancel",
     "save_analysis_result",
     "save_embeddings",
+    "save_llm_usage_events",
     "save_qa_message",
     "save_report",
-    "save_llm_usage_events",
     "set_app_setting",
     "set_default_model",
     "set_report_language",

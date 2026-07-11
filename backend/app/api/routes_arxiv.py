@@ -14,6 +14,7 @@ from app.services.arxiv_client import (
     download_arxiv_pdf,
     fetch_arxiv_metadata,
     get_arxiv_versions,
+    is_valid_arxiv_id,
     normalize_arxiv_id,
 )
 
@@ -41,7 +42,7 @@ def import_arxiv(
     payload: ArxivImportRequest,
 ) -> PaperResponse:
     arxiv_id = normalize_arxiv_id(payload.arxiv_id)
-    if not arxiv_id:
+    if not arxiv_id or not is_valid_arxiv_id(arxiv_id):
         raise HTTPException(status_code=400, detail="Invalid arXiv ID or URL.")
 
     settings = get_settings()
@@ -49,6 +50,8 @@ def import_arxiv(
 
     try:
         pdf_path = download_arxiv_pdf(arxiv_id, settings.upload_path, max_bytes=settings.upload_max_bytes)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail="Failed to download a valid PDF from arXiv.") from exc
 

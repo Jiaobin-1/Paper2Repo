@@ -204,6 +204,10 @@ export const messages = {
     pollingTimeout: "分析运行时间过长，请刷新页面查看最新状态。",
     pdfParseFailed: "PDF 解析失败，请确认文件未损坏。",
     llmTimeout: "大模型响应超时，请稍后重试。",
+    errorBoundaryTitle: "页面出现错误",
+    errorBoundaryHint: "渲染此页面时发生了意外错误。你可以重试，或返回首页。",
+    errorBoundaryRetry: "重试",
+    errorBoundaryHome: "返回首页",
   },
   en: {
     settings: "Settings",
@@ -410,5 +414,9 @@ export const messages = {
     pollingTimeout: "Analysis is taking too long. Please refresh the page for the latest status.",
     pdfParseFailed: "PDF parsing failed. Please verify the file is not corrupted.",
     llmTimeout: "Model response timed out. Please try again later.",
+    errorBoundaryTitle: "Something went wrong",
+    errorBoundaryHint: "An unexpected error occurred while rendering this page. You can retry, or go back home.",
+    errorBoundaryRetry: "Try again",
+    errorBoundaryHome: "Back Home",
   },
 } as const;

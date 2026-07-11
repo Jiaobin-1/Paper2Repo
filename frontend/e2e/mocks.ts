@@ -54,12 +54,9 @@ export async function mockAppApis(page: Page) {
   );
 
   await page.route("**/api/runs**", (route) => {
-    if (route.request().url().includes("/api/runs/queue")) {
-      return route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify(mockQueueStatus),
-      });
+    const url = new URL(route.request().url());
+    if (url.pathname !== "/api/runs") {
+      return route.fallback();
     }
     return route.fulfill({
       status: 200,

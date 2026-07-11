@@ -39,7 +39,7 @@ export default function BatchUpload() {
         ) : null}
       </div>
 
-      <p className="muted">{batch.message}</p>
+      <p className="muted" aria-live="polite">{batch.message}</p>
 
       <div className="grid">
         <InfoBlock title={text(language, "queueStatus")} value={formatQueueStatus(batch.queueStatus, language)} />

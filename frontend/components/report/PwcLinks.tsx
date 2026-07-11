@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAppLanguage } from "@/hooks/useAppLanguage";
 import { getPwcLinks } from "@/lib/api";
+import { logError } from "@/lib/logError";
 import { text } from "@/lib/i18n";
 import type { PwcLink } from "@/lib/types";
 
@@ -19,14 +20,25 @@ export default function PwcLinks({ runId }: { runId: string }) {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
+    let isMounted = true;
+    setLoaded(false);
+    setLinks([]);
     getPwcLinks(runId)
       .then((data) => {
-        setLinks(data);
-        setLoaded(true);
+        if (isMounted) {
+          setLinks(data);
+          setLoaded(true);
+        }
       })
-      .catch(() => {
-        setLoaded(true);
+      .catch((error) => {
+        logError("Failed to load Papers With Code links", error);
+        if (isMounted) {
+          setLoaded(true);
+        }
       });
+    return () => {
+      isMounted = false;
+    };
   }, [runId]);
 
   if (!loaded || links.length === 0) return null;

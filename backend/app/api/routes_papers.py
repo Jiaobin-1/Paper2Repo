@@ -8,6 +8,7 @@ from app.core.database import (
     create_batch_id,
     create_paper,
     create_run,
+    delete_paper,
     delete_run,
     get_paper,
     list_papers,
@@ -15,6 +16,7 @@ from app.core.database import (
 )
 from app.schemas.paper import BatchStartResponse, BatchUploadResponse, PaperResponse, RunListItemResponse, RunResponse
 from app.services import analysis_runner
+from app.services.storage_maintenance import delete_managed_file
 from app.services.uploads import save_pdf_upload, save_pdf_uploads
 
 router = APIRouter(
@@ -58,6 +60,31 @@ def get_paper_detail(paper_id: str) -> PaperResponse:
     if not paper:
         raise HTTPException(status_code=404, detail="Paper not found.")
     return PaperResponse(**paper)
+
+
+@router.delete(
+    "/{paper_id}",
+    response_model=PaperResponse,
+    summary="Delete a paper",
+    description=(
+        "Delete a paper and all completed/failed analysis data, reports, chunks, "
+        "embeddings, citations, usage records, and managed local files."
+    ),
+)
+def delete_paper_detail(paper_id: str) -> PaperResponse:
+    deletion = delete_paper(paper_id)
+    if deletion.status == "not_found":
+        raise HTTPException(status_code=404, detail="Paper not found.")
+    if deletion.status == "active_runs":
+        raise HTTPException(status_code=409, detail="Paper has pending or running analyses.")
+    if deletion.paper is None:
+        raise RuntimeError("Paper deletion completed without the deleted paper record.")
+
+    upload_path = str(deletion.paper["file_path"])
+    for path in deletion.storage_paths:
+        area = "uploads" if path == upload_path else "reports"
+        delete_managed_file(path, area=area)
+    return PaperResponse(**deletion.paper)
 
 
 @router.get(

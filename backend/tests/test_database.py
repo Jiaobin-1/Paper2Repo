@@ -10,19 +10,35 @@ from app.core.database import (
     STALE_RUN_ERROR_MESSAGE,
     claim_analysis_job,
     create_analysis_job,
+    create_citations,
     create_paper,
     create_run,
+    delete_paper,
     delete_run,
     fail_analysis_job,
+    get_all_embeddings,
     get_analysis_job,
+    get_analysis_result,
+    get_citations_for_run,
     get_connection,
     get_llm_usage_summary,
+    get_paper,
+    get_paper_chunks,
+    get_paper_storage_paths,
+    get_qa_history,
+    get_report,
     get_run,
     init_db,
     list_recoverable_analysis_jobs,
+    paper_has_active_runs,
     recover_stale_runs,
+    replace_chunks,
     request_analysis_cancel,
+    save_analysis_result,
+    save_embeddings,
     save_llm_usage_events,
+    save_qa_message,
+    save_report,
     update_run_status,
 )
 
@@ -57,9 +73,18 @@ def test_init_db_enables_foreign_keys_and_query_indexes(isolated_settings):
             for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'index'").fetchall()
         }
 
-    assert "idx_analysis_runs_paper_created" in index_names
-    assert "idx_analysis_jobs_recovery" in index_names
-    assert "idx_paper_embeddings_paper_chunk" in index_names
+    assert {
+        "idx_papers_created_at",
+        "idx_paper_chunks_paper_chunk",
+        "idx_analysis_runs_paper_created",
+        "idx_analysis_runs_status_updated",
+        "idx_analysis_runs_batch_created",
+        "idx_analysis_jobs_recovery",
+        "idx_qa_messages_run_created",
+        "idx_paper_embeddings_paper_chunk",
+        "idx_citations_run_index",
+        "idx_citations_paper_title",
+    } <= index_names
 
 
 def test_foreign_keys_reject_orphan_run(isolated_settings):
@@ -243,8 +268,6 @@ def test_recover_stale_runs_marks_only_pending_and_running(isolated_settings):
 
 
 def test_delete_run_removes_run_result_and_report_rows(isolated_settings):
-    from app.core.database import get_report, save_analysis_result, save_report
-
     init_db()
     pdf_path = isolated_settings / "paper.pdf"
     report_path = isolated_settings / "reports" / "run.md"
@@ -256,12 +279,111 @@ def test_delete_run_removes_run_result_and_report_rows(isolated_settings):
     update_run_status(run["id"], "completed", completed=True, current_step="completed", progress_percent=100)
     save_analysis_result(run["id"], paper["id"], {})
     save_report(run["id"], paper["id"], "Report", "content", report_path)
+    create_citations(
+        run["id"],
+        paper["id"],
+        [{"index": 1, "authors": "A", "title": "Cited Paper", "raw_text": "A. Cited Paper."}],
+    )
 
     deleted = delete_run(run["id"])
 
     assert deleted["id"] == run["id"]
     assert get_run(run["id"]) is None
     assert get_report(run["id"]) is None
+    assert get_citations_for_run(run["id"]) == []
+
+
+def test_delete_paper_removes_all_dependent_rows(isolated_settings):
+    init_db()
+    pdf_path = isolated_settings / "paper.pdf"
+    report_path = isolated_settings / "reports" / "run.md"
+    pdf_path.write_bytes(b"%PDF-1.4\n%%EOF")
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text("report", encoding="utf-8")
+    paper = create_paper("paper.pdf", pdf_path, pdf_path.stat().st_size)
+    run = create_run(paper["id"])
+    update_run_status(run["id"], "completed", completed=True, current_step="completed", progress_percent=100)
+    create_analysis_job(run["id"], paper["id"])
+    replace_chunks(
+        paper["id"],
+        [
+            {
+                "content": "chunk content",
+                "metadata": {"chunk_index": 0, "page_start": 1, "page_end": 1, "section_title": "Intro"},
+            }
+        ],
+    )
+    save_embeddings(paper["id"], [(0, b"embedding")])
+    save_analysis_result(run["id"], paper["id"], {"metadata": {"title": "Paper"}})
+    save_report(run["id"], paper["id"], "Report", "content", report_path)
+    save_qa_message(run["id"], paper["id"], "user", "Question?")
+    save_llm_usage_events(
+        run["id"],
+        [
+            {
+                "model": "test-model",
+                "mode": "chat",
+                "operation": "chat",
+                "input_tokens": 2,
+                "output_tokens": 3,
+                "total_tokens": 5,
+                "estimated_cost_usd": 0.0001,
+                "latency_ms": 10,
+                "attempts": 1,
+            }
+        ],
+    )
+    create_citations(
+        run["id"],
+        paper["id"],
+        [{"index": 1, "authors": "A", "title": "Cited Paper", "raw_text": "A. Cited Paper."}],
+    )
+
+    assert paper_has_active_runs(paper["id"]) is False
+    assert set(get_paper_storage_paths(paper["id"])) == {str(pdf_path), str(report_path)}
+    assert get_llm_usage_summary(run["id"])["call_count"] == 1
+
+    deletion = delete_paper(paper["id"])
+
+    assert deletion.status == "deleted"
+    assert deletion.paper is not None
+    assert deletion.paper["id"] == paper["id"]
+    assert set(deletion.storage_paths) == {str(pdf_path), str(report_path)}
+    assert get_paper(paper["id"]) is None
+    assert get_run(run["id"]) is None
+    assert get_analysis_job(run["id"]) is None
+    assert get_analysis_result(run["id"]) is None
+    assert get_report(run["id"]) is None
+    assert get_qa_history(run["id"]) == []
+    assert get_citations_for_run(run["id"]) == []
+    assert get_paper_chunks(paper["id"]) == []
+    assert get_all_embeddings() == []
+    assert get_llm_usage_summary(run["id"])["call_count"] == 0
+
+
+def test_paper_has_active_runs_detects_pending_and_running(isolated_settings):
+    init_db()
+    pdf_path = isolated_settings / "paper.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4\n%%EOF")
+    paper = create_paper("paper.pdf", pdf_path, pdf_path.stat().st_size)
+    run = create_run(paper["id"])
+
+    assert paper_has_active_runs(paper["id"]) is True
+    deletion = delete_paper(paper["id"])
+    assert deletion.status == "active_runs"
+    assert get_paper(paper["id"]) is not None
+
+    update_run_status(run["id"], "failed", completed=True, current_step="failed")
+    assert paper_has_active_runs(paper["id"]) is False
+
+
+def test_delete_paper_reports_not_found(isolated_settings):
+    init_db()
+
+    deletion = delete_paper("missing-paper")
+
+    assert deletion.status == "not_found"
+    assert deletion.paper is None
 
 
 def test_analysis_job_lifecycle_and_recovery(isolated_settings):

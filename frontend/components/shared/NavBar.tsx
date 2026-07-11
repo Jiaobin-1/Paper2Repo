@@ -6,6 +6,7 @@ import { useCallback } from "react";
 import { SETTINGS_UPDATED_EVENT, useAppLanguage } from "@/hooks/useAppLanguage";
 import { useTheme } from "@/hooks/useTheme";
 import { updateAppSettings } from "@/lib/api";
+import { logError } from "@/lib/logError";
 import { text } from "@/lib/i18n";
 import type { ThemeMode } from "@/lib/types";
 
@@ -57,8 +58,8 @@ export default function NavBar() {
     try {
       await updateAppSettings({ theme: next });
       window.dispatchEvent(new Event(SETTINGS_UPDATED_EVENT));
-    } catch {
-      // ignore
+    } catch (error) {
+      logError("Failed to update theme", error);
     }
   }, [theme]);
 

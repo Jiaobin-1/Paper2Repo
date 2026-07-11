@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     openai_timeout_seconds: float = 60.0
     llm_input_cost_per_million: float = 0.0
     llm_output_cost_per_million: float = 0.0
+
+    # Optional shared-secret guard for /api/* routes. Empty (the default) keeps
+    # the local single-user experience open; set it when exposing the backend
+    # beyond localhost so callers must send `Authorization: Bearer <token>`.
     api_auth_token: str = ""
 
     database_url: str = "sqlite:///./data/paper2repo.db"

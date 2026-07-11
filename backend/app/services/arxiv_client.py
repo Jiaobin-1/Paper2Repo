@@ -30,6 +30,10 @@ _METADATA_MAX_BYTES = 2 * 1024 * 1024
 _DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 _PDF_SIGNATURE = b"%PDF-"
 
+def is_valid_arxiv_id(arxiv_id: str) -> bool:
+    """Return whether a raw value is exactly one supported arXiv identifier."""
+    return bool(_ARXIV_ID_PATTERN.fullmatch(arxiv_id.strip()))
+
 
 def extract_arxiv_id(text: str) -> str | None:
     candidate = normalize_arxiv_id(text)
@@ -69,6 +73,7 @@ def _parse_arxiv_xml(xml_data: bytes, arxiv_id: str) -> dict[str, Any]:
     try:
         root = safe_xml_fromstring(xml_data)
     except Exception:
+        logger.warning("Failed to parse arXiv XML for %s", arxiv_id, exc_info=True)
         return {}
 
     entry = root.find("atom:entry", ns)
@@ -124,9 +129,7 @@ def download_arxiv_pdf(arxiv_id: str, dest_dir: Path, *, max_bytes: int | None =
             if content_length and int(content_length) > limit:
                 raise ValueError(f"arXiv PDF exceeds the configured {limit // (1024 * 1024)} MB limit.")
             _copy_limited(response, output, limit)
-        with partial_path.open("rb") as saved_file:
-            if saved_file.read(len(_PDF_SIGNATURE)) != _PDF_SIGNATURE:
-                raise ValueError("arXiv returned content that is not a PDF.")
+        _validate_pdf_signature(partial_path)
         partial_path.replace(dest_path)
     except Exception:
         partial_path.unlink(missing_ok=True)
@@ -134,6 +137,13 @@ def download_arxiv_pdf(arxiv_id: str, dest_dir: Path, *, max_bytes: int | None =
         raise
 
     return dest_path
+
+
+def _validate_pdf_signature(path: Path) -> None:
+    with path.open("rb") as saved:
+        if saved.read(len(_PDF_SIGNATURE)) != _PDF_SIGNATURE:
+            path.unlink(missing_ok=True)
+            raise ValueError("arXiv returned content that is not a valid PDF.")
 
 
 def get_arxiv_versions(arxiv_id: str) -> list[dict[str, str]]:

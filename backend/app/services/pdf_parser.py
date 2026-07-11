@@ -54,6 +54,7 @@ def parse_pdf(pdf_path: str | Path, *, max_pages: int | None = None) -> ParsedPa
         raise FileNotFoundError(f"PDF not found: {path}")
 
     settings = get_settings()
+    page_limit = max(1, max_pages if max_pages is not None else settings.pdf_max_pages)
     page_texts: list[PageText] = []
     sections: list[SectionCandidate] = []
     raw_parts: list[str] = []
@@ -63,7 +64,6 @@ def parse_pdf(pdf_path: str | Path, *, max_pages: int | None = None) -> ParsedPa
 
     try:
         with fitz.open(path) as document:
-            page_limit = max(1, max_pages or settings.pdf_max_pages)
             if document.page_count > page_limit:
                 raise PdfPageLimitError(
                     f"PDF has {document.page_count} pages, exceeding the configured limit of {page_limit}."

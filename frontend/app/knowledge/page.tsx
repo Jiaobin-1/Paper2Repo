@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import KnowledgeSearch from "@/components/knowledge/KnowledgeSearch";
 import { useAppLanguage } from "@/hooks/useAppLanguage";
 import { getKnowledgePapers } from "@/lib/api";
+import { logError } from "@/lib/logError";
 import { text } from "@/lib/i18n";
 import type { KnowledgePaper } from "@/lib/types";
 
@@ -19,7 +20,8 @@ export default function KnowledgePage() {
         setPapers(data);
         setLoaded(true);
       })
-      .catch(() => {
+      .catch((error) => {
+        logError("Failed to load indexed papers", error);
         setLoaded(true);
       });
   }, []);

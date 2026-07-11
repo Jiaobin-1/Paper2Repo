@@ -8,7 +8,7 @@ from app.main import create_app
 
 
 @pytest.fixture()
-def client_with_token(isolated_settings, monkeypatch: pytest.MonkeyPatch):
+def client_with_token(isolated_settings, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setenv("API_AUTH_TOKEN", "s3cret")
     get_settings.cache_clear()
     with TestClient(create_app()) as client:

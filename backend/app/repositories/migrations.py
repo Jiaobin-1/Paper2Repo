@@ -220,6 +220,8 @@ def _ensure_batch_column(conn: sqlite3.Connection) -> None:
 def _ensure_indexes(conn: sqlite3.Connection) -> None:
     conn.executescript(
         """
+        CREATE INDEX IF NOT EXISTS idx_papers_created_at
+            ON papers(created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_paper_chunks_paper_chunk
             ON paper_chunks(paper_id, chunk_index);
         CREATE INDEX IF NOT EXISTS idx_paper_embeddings_paper_chunk
@@ -228,6 +230,8 @@ def _ensure_indexes(conn: sqlite3.Connection) -> None:
             ON analysis_runs(paper_id, created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_analysis_runs_batch
             ON analysis_runs(batch_id);
+        CREATE INDEX IF NOT EXISTS idx_analysis_runs_batch_created
+            ON analysis_runs(batch_id, created_at);
         CREATE INDEX IF NOT EXISTS idx_analysis_runs_status_updated
             ON analysis_runs(status, updated_at);
         CREATE INDEX IF NOT EXISTS idx_analysis_jobs_recovery
@@ -236,6 +240,8 @@ def _ensure_indexes(conn: sqlite3.Connection) -> None:
             ON qa_messages(run_id, created_at);
         CREATE INDEX IF NOT EXISTS idx_citations_run_index
             ON citations(run_id, citation_index);
+        CREATE INDEX IF NOT EXISTS idx_citations_paper_title
+            ON citations(paper_id, title);
         CREATE INDEX IF NOT EXISTS idx_llm_usage_run_created
             ON llm_usage_events(run_id, created_at);
         """
