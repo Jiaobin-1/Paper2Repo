@@ -2,10 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
-import { getArxivInfo, importArxiv } from "../../lib/api";
-import { text } from "../../lib/i18n";
-import { useAppLanguage } from "../../lib/useAppLanguage";
-import type { ArxivInfo } from "../../lib/types";
+import { useAppLanguage } from "@/hooks/useAppLanguage";
+import { getArxivInfo, importArxiv } from "@/lib/api";
+import { text } from "@/lib/i18n";
+import type { ArxivInfo } from "@/lib/types";
 
 export default function ArxivPage() {
   const language = useAppLanguage();

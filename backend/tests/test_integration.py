@@ -16,16 +16,14 @@ def _client():
     return TestClient(create_app())
 
 
-def _wait_for_terminal(client, run_id, timeout=30.0):
-    """Analysis runs on a background thread pool; poll until it settles."""
+def _wait_for_terminal_run(client: TestClient, run_id: str, timeout: float = 5.0):
     deadline = time.monotonic() + timeout
-    response = client.get(f"/api/runs/{run_id}")
     while time.monotonic() < deadline:
-        if response.status_code == 200 and response.json()["status"] in {"completed", "failed"}:
-            return response
-        time.sleep(0.05)
         response = client.get(f"/api/runs/{run_id}")
-    return response
+        if response.json()["status"] in {"completed", "failed"}:
+            return response
+        time.sleep(0.01)
+    raise AssertionError(f"Run {run_id} did not reach a terminal state.")
 
 
 pytestmark = pytest.mark.skipif(
@@ -37,12 +35,12 @@ pytestmark = pytest.mark.skipif(
 class TestFullPipeline:
     def test_upload_and_run_produces_report(self, isolated_settings, monkeypatch):
         from app.agents.graph import run_analysis as real_run_analysis
-        from app.api import routes_papers
+        from app.services import analysis_runner
 
         def sync_run_analysis(**kwargs):
             return real_run_analysis(**kwargs)
 
-        monkeypatch.setattr(routes_papers, "run_analysis", sync_run_analysis)
+        monkeypatch.setattr(analysis_runner, "run_analysis", sync_run_analysis)
 
         pdf_bytes = SAMPLE_PDF.read_bytes()
 
@@ -58,13 +56,33 @@ class TestFullPipeline:
             assert run_resp.status_code == 200
             run_id = run_resp.json()["id"]
 
-            detail_resp = _wait_for_terminal(client, run_id)
+            detail_resp = _wait_for_terminal_run(client, run_id)
             assert detail_resp.status_code == 200
             assert detail_resp.json()["status"] == "completed"
 
             report_resp = client.get(f"/api/runs/{run_id}/report")
             assert report_resp.status_code == 200
             assert len(report_resp.json()["content"]) > 0
+
+            markdown_resp = client.get(f"/api/runs/{run_id}/report.md")
+            assert markdown_resp.status_code == 200
+            assert "text/markdown" in markdown_resp.headers["content-type"]
+            assert len(markdown_resp.content) > 0
+
+            pdf_resp = client.get(f"/api/runs/{run_id}/report.pdf")
+            assert pdf_resp.status_code == 200
+            assert pdf_resp.headers["content-type"] == "application/pdf"
+            assert pdf_resp.content[:5] == b"%PDF-"
+
+            html_resp = client.get(f"/api/runs/{run_id}/report.html")
+            assert html_resp.status_code == 200
+            assert "text/html" in html_resp.headers["content-type"]
+            assert b"<html" in html_resp.content.lower()
+
+            latex_resp = client.get(f"/api/runs/{run_id}/report.tex")
+            assert latex_resp.status_code == 200
+            assert "application/x-latex" in latex_resp.headers["content-type"]
+            assert b"\\documentclass" in latex_resp.content
 
             markdown_resp = client.get(f"/api/runs/{run_id}/report.md")
             assert markdown_resp.status_code == 200

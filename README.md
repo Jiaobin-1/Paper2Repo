@@ -110,20 +110,38 @@ Paper2Repo stores uploaded PDFs, generated Markdown reports, analysis JSON, chun
 | `OPENAI_MODEL` | Default model for new runs | `gpt-4o-mini` |
 | `OPENAI_MODEL_OPTIONS` | Comma-separated model options | `gpt-4o-mini,gpt-4o,deepseek-chat` |
 | `OPENAI_TIMEOUT_SECONDS` | LLM request timeout | `60` |
-| `API_AUTH_TOKEN` | Optional bearer token for `/api/*` routes when exposing the backend beyond localhost | not set |
+| `LLM_INPUT_COST_PER_MILLION` | Input-token price used for cost estimates | `0` |
+| `LLM_OUTPUT_COST_PER_MILLION` | Output-token price used for cost estimates | `0` |
+| `API_AUTH_TOKEN` | Optional Bearer token for proxy-fronted/programmatic `/api/*` access | not set |
 | `DATABASE_URL` | SQLite database URL | `sqlite:///./data/paper2repo.db` |
 | `UPLOAD_MAX_MB` | Single upload size limit | `50` |
-| `PDF_MAX_PAGES` | Maximum parsed PDF page count | `300` |
-| `ANALYSIS_MAX_WORKERS` | Maximum local analysis workers | `3` |
+| `PDF_MAX_PAGES` | Maximum pages parsed from one PDF | `300` |
+| `PDF_OCR_ENABLED` | OCR sparse/scanned pages when local Tesseract support is available | `true` |
+| `PDF_EXTRACT_TABLES` | Add detected tables to retrieval chunks | `true` |
+| `PDF_EXTRACT_FORMULAS` | Add formula-like lines to retrieval chunks | `true` |
+| `ANALYSIS_MAX_WORKERS` | Shared worker limit for all analysis runs | `3` |
+| `ANALYSIS_MAX_QUEUED_JOBS` | Maximum waiting jobs beyond active workers | `20` |
+| `ANALYSIS_JOB_LEASE_SECONDS` | Worker lease before an interrupted job can be reclaimed | `3600` |
+| `ANALYSIS_RECOVERY_INTERVAL_SECONDS` | Periodic interrupted-job recovery interval | `30` |
+| `STORAGE_CLEANUP_MIN_AGE_HOURS` | Minimum age before unreferenced upload/report files are cleanup candidates | `24` |
 
 ## Project Structure
 
 ```text
 Paper2Repo/
-├── backend/      FastAPI, LangGraph workflow, SQLite persistence
-├── frontend/     Next.js app, report UI, settings, batch tools
-├── docs/         API, architecture notes, sample report
-└── .github/      CI workflow
+├── backend/
+│   ├── app/api/         FastAPI route modules and aggregated API router
+│   ├── app/agents/      LangGraph workflow and analysis nodes
+│   ├── app/core/        app lifecycle, settings, SQLite persistence
+│   ├── app/services/    parsing, retrieval, export, and LLM services
+│   └── tests/           backend API and workflow coverage
+├── frontend/
+│   ├── app/             Next.js routes and page entrypoints
+│   ├── components/      reusable UI grouped by feature
+│   ├── hooks/           UI state hooks for language and theme
+│   └── lib/             API client, types, i18n, polling, formatting
+├── docs/                API, architecture notes, sample report
+└── .github/             CI workflow
 ```
 
 ## Documentation
@@ -136,9 +154,10 @@ Paper2Repo/
 
 ```bash
 cd backend
-python -m ruff check app tests
+python -m ruff check app tests scripts
 python -m mypy app --ignore-missing-imports
 python -m pytest tests -q
+python -m scripts.run_quality_benchmark
 
 cd ../frontend
 npm run lint
@@ -149,9 +168,27 @@ npm run test:e2e
 
 Current local verification baseline:
 
-- `pytest`: 205 tests
-- `vitest`: 34 tests
-- `Playwright`: 22 tests
+- `pytest`: 242 tests
+- `vitest`: 43 tests
+- `Playwright`: 22 mocked UI tests plus 1 real frontend-backend flow
+
+Run the real full-stack flow locally with a Python environment that has the backend dependencies installed:
+
+```bash
+cd frontend
+npm run test:e2e:fullstack
+```
+
+If the backend dependencies live in the documented Conda environment, set
+`FULLSTACK_BACKEND_COMMAND="conda run -n agent-learning python -m uvicorn app.main:app --host 127.0.0.1 --port 8000"`.
+
+The deterministic quality benchmark uses the local fallback pipeline and exits non-zero when a checked-in paper case falls below its configured score. It now checks report quality signals such as evidence coverage, low-confidence items, and fallback-template usage. Add cases in `backend/benchmarks/quality_cases.json` as report expectations mature.
+
+The Settings page exposes local storage usage and can clean orphan upload/report files that are no longer referenced by SQLite and are older than `STORAGE_CLEANUP_MIN_AGE_HOURS`.
+
+`API_AUTH_TOKEN` is opt-in. Leave it empty for the local browser UI. When set, every `/api/*` request must send `Authorization: Bearer <token>`; this mode is intended for a reverse proxy that injects the header or for programmatic clients, because ordinary browser download links cannot attach it.
+
+Docker includes English and Simplified Chinese Tesseract data. Manual installations need a local Tesseract runtime for OCR; set `PDF_OCR_LANGUAGE=eng+chi_sim` when both languages are required. OCR failure never blocks native PDF text extraction.
 
 Quality coverage includes report quality gates, export route checks, database cleanup checks, and a browser-level upload -> analysis -> report rendering flow.
 

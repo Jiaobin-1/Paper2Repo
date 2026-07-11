@@ -1,31 +1,13 @@
 import hmac
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from collections.abc import Awaitable, Callable
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
-from app.api.routes_arxiv import router as arxiv_router
-from app.api.routes_citations import router as citations_router
-from app.api.routes_compare import router as compare_router
-from app.api.routes_knowledge import router as knowledge_router
-from app.api.routes_llm import router as llm_router
-from app.api.routes_papers import router as papers_router
-from app.api.routes_papers import start_recoverable_analysis_jobs
-from app.api.routes_pwc import router as pwc_router
-from app.api.routes_qa import router as qa_router
-from app.api.routes_runs import router as runs_router
-from app.api.routes_settings import router as settings_router
+from app.api import api_router
 from app.core.config import get_settings
-from app.core.database import init_db
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    init_db()
-    start_recoverable_analysis_jobs()
-    yield
+from app.core.lifecycle import lifespan
 
 
 def create_app() -> FastAPI:
@@ -49,33 +31,28 @@ def create_app() -> FastAPI:
     )
 
     @app.middleware("http")
-    async def require_api_token(request: Request, call_next):  # type: ignore[no-untyped-def]
+    async def require_api_token(
+        request: Request,
+        call_next: Callable[[Request], Awaitable[Response]],
+    ) -> Response:
         token = get_settings().api_auth_token
-        path = request.url.path
-        # Auth is opt-in: with no token configured the backend stays open for
-        # local use. Preflight, health, and the docs surface are always exempt.
-        guarded = bool(token) and path.startswith("/api/") and request.method != "OPTIONS"
+        api_path = request.url.path == "/api" or request.url.path.startswith("/api/")
+        guarded = bool(token) and api_path and request.method != "OPTIONS"
         if guarded:
-            header = request.headers.get("authorization", "")
-            scheme, _, presented = header.partition(" ")
+            scheme, _, presented = request.headers.get("authorization", "").partition(" ")
             if scheme.lower() != "bearer" or not hmac.compare_digest(presented, token):
-                return JSONResponse({"detail": "Unauthorized"}, status_code=401)
+                return JSONResponse(
+                    {"detail": "Unauthorized"},
+                    status_code=401,
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
         return await call_next(request)
 
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok", "service": "paper2repo-api"}
 
-    app.include_router(papers_router, prefix="/api")
-    app.include_router(arxiv_router, prefix="/api")
-    app.include_router(runs_router, prefix="/api")
-    app.include_router(citations_router, prefix="/api")
-    app.include_router(llm_router, prefix="/api")
-    app.include_router(settings_router, prefix="/api")
-    app.include_router(qa_router, prefix="/api")
-    app.include_router(compare_router, prefix="/api")
-    app.include_router(knowledge_router, prefix="/api")
-    app.include_router(pwc_router, prefix="/api")
+    app.include_router(api_router)
     return app
 
 

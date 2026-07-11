@@ -198,3 +198,75 @@ export type BatchStatusResponse = {
   batch_id: string;
   runs: RunListItem[];
 };
+
+export type QueueStatus = {
+  max_workers: number;
+  max_queued_jobs: number;
+  capacity: number;
+  active_submissions: number;
+  running_submissions: number;
+  queued_submissions: number;
+  available_slots: number;
+  is_full: boolean;
+  retry_after_seconds: number;
+  pending_runs: number;
+  running_runs: number;
+};
+
+export type LlmUsageEvent = {
+  model: string;
+  mode: string;
+  operation: string;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  estimated_cost_usd: number;
+  latency_ms: number;
+  attempts: number;
+  created_at: string;
+};
+
+export type LlmUsageSummary = {
+  run_id: string;
+  call_count: number;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  estimated_cost_usd: number;
+  latency_ms: number;
+  cost_estimation_configured: boolean;
+  events: LlmUsageEvent[];
+};
+
+export type StorageAreaSummary = {
+  path: string;
+  file_count: number;
+  byte_count: number;
+};
+
+export type StorageCleanupCandidate = {
+  area: string;
+  path: string;
+  byte_count: number;
+  age_hours: number;
+  reason: string;
+};
+
+export type StorageSummary = {
+  uploads: StorageAreaSummary;
+  reports: StorageAreaSummary;
+  database: StorageAreaSummary;
+  total_bytes: number;
+  orphan_file_count: number;
+  orphan_bytes: number;
+  cleanup_min_age_hours: number;
+  cleanup_candidates: StorageCleanupCandidate[];
+};
+
+export type StorageCleanupResult = {
+  dry_run: boolean;
+  deleted_file_count: number;
+  deleted_bytes: number;
+  skipped_file_count: number;
+  candidates: StorageCleanupCandidate[];
+};

@@ -2,15 +2,15 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
-import { text } from "../lib/i18n";
-import { useAppLanguage } from "../lib/useAppLanguage";
+import { useAppLanguage } from "@/hooks/useAppLanguage";
+import { text } from "@/lib/i18n";
+import { logError } from "@/lib/logError";
 
 export default function Error({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   const language = useAppLanguage();
 
   useEffect(() => {
-    // Surface the error in the console for debugging; Next.js otherwise swallows it.
-    console.error(error);
+    logError("Unhandled route error", error);
   }, [error]);
 
   return (

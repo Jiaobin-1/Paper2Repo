@@ -3,6 +3,8 @@ from __future__ import annotations
 import sqlite3
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from app.core.config import get_settings
 from app.core.database import (
     STALE_RUN_ERROR_MESSAGE,
@@ -19,6 +21,7 @@ from app.core.database import (
     get_analysis_result,
     get_citations_for_run,
     get_connection,
+    get_llm_usage_summary,
     get_paper,
     get_paper_chunks,
     get_paper_storage_paths,
@@ -33,6 +36,7 @@ from app.core.database import (
     request_analysis_cancel,
     save_analysis_result,
     save_embeddings,
+    save_llm_usage_events,
     save_qa_message,
     save_report,
     update_run_status,
@@ -60,23 +64,15 @@ def test_init_db_creates_updated_at_and_run_updates(isolated_settings):
     assert updated_run["updated_at"]
 
 
-def test_init_db_creates_query_indexes(isolated_settings):
+def test_init_db_enables_foreign_keys_and_query_indexes(isolated_settings):
     init_db()
-
     with get_connection() as conn:
-        index_rows = []
-        for table in [
-            "papers",
-            "paper_chunks",
-            "analysis_runs",
-            "analysis_jobs",
-            "qa_messages",
-            "paper_embeddings",
-            "citations",
-        ]:
-            index_rows.extend(conn.execute(f"PRAGMA index_list({table})").fetchall())
+        assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+        index_names = {
+            row["name"]
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'index'").fetchall()
+        }
 
-    indexes = {row["name"] for row in index_rows}
     assert {
         "idx_papers_created_at",
         "idx_paper_chunks_paper_chunk",
@@ -88,7 +84,66 @@ def test_init_db_creates_query_indexes(isolated_settings):
         "idx_paper_embeddings_paper_chunk",
         "idx_citations_run_index",
         "idx_citations_paper_title",
-    } <= indexes
+    } <= index_names
+
+
+def test_foreign_keys_reject_orphan_run(isolated_settings):
+    init_db()
+    now = datetime.now(UTC).isoformat()
+    with pytest.raises(sqlite3.IntegrityError), get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO analysis_runs (
+                id, paper_id, status, current_step, progress_percent,
+                started_at, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("orphan", "missing-paper", "pending", "queued", 0, now, now, now),
+        )
+
+
+def test_llm_usage_summary_aggregates_tokens_cost_and_latency(isolated_settings):
+    init_db()
+    pdf_path = isolated_settings / "paper.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4\n%%EOF")
+    paper = create_paper("paper.pdf", pdf_path, pdf_path.stat().st_size)
+    run = create_run(paper["id"])
+    save_llm_usage_events(
+        run["id"],
+        [
+            {
+                "model": "test-model",
+                "mode": "responses_structured",
+                "operation": "PaperMetadata",
+                "input_tokens": 100,
+                "output_tokens": 25,
+                "total_tokens": 125,
+                "estimated_cost_usd": 0.0002,
+                "latency_ms": 50,
+                "attempts": 1,
+            },
+            {
+                "model": "test-model",
+                "mode": "chat",
+                "operation": "chat",
+                "input_tokens": 20,
+                "output_tokens": 10,
+                "total_tokens": 30,
+                "estimated_cost_usd": 0.0001,
+                "latency_ms": 25,
+                "attempts": 1,
+            },
+        ],
+    )
+
+    summary = get_llm_usage_summary(run["id"])
+
+    assert summary["call_count"] == 2
+    assert summary["input_tokens"] == 120
+    assert summary["output_tokens"] == 35
+    assert summary["total_tokens"] == 155
+    assert summary["estimated_cost_usd"] == 0.0003
+    assert summary["latency_ms"] == 75
 
 
 def test_init_db_migrates_existing_analysis_runs_without_updated_at(isolated_settings):
@@ -262,6 +317,22 @@ def test_delete_paper_removes_all_dependent_rows(isolated_settings):
     save_analysis_result(run["id"], paper["id"], {"metadata": {"title": "Paper"}})
     save_report(run["id"], paper["id"], "Report", "content", report_path)
     save_qa_message(run["id"], paper["id"], "user", "Question?")
+    save_llm_usage_events(
+        run["id"],
+        [
+            {
+                "model": "test-model",
+                "mode": "chat",
+                "operation": "chat",
+                "input_tokens": 2,
+                "output_tokens": 3,
+                "total_tokens": 5,
+                "estimated_cost_usd": 0.0001,
+                "latency_ms": 10,
+                "attempts": 1,
+            }
+        ],
+    )
     create_citations(
         run["id"],
         paper["id"],
@@ -270,10 +341,14 @@ def test_delete_paper_removes_all_dependent_rows(isolated_settings):
 
     assert paper_has_active_runs(paper["id"]) is False
     assert set(get_paper_storage_paths(paper["id"])) == {str(pdf_path), str(report_path)}
+    assert get_llm_usage_summary(run["id"])["call_count"] == 1
 
-    deleted = delete_paper(paper["id"])
+    deletion = delete_paper(paper["id"])
 
-    assert deleted["id"] == paper["id"]
+    assert deletion.status == "deleted"
+    assert deletion.paper is not None
+    assert deletion.paper["id"] == paper["id"]
+    assert set(deletion.storage_paths) == {str(pdf_path), str(report_path)}
     assert get_paper(paper["id"]) is None
     assert get_run(run["id"]) is None
     assert get_analysis_job(run["id"]) is None
@@ -283,6 +358,7 @@ def test_delete_paper_removes_all_dependent_rows(isolated_settings):
     assert get_citations_for_run(run["id"]) == []
     assert get_paper_chunks(paper["id"]) == []
     assert get_all_embeddings() == []
+    assert get_llm_usage_summary(run["id"])["call_count"] == 0
 
 
 def test_paper_has_active_runs_detects_pending_and_running(isolated_settings):
@@ -293,9 +369,21 @@ def test_paper_has_active_runs_detects_pending_and_running(isolated_settings):
     run = create_run(paper["id"])
 
     assert paper_has_active_runs(paper["id"]) is True
+    deletion = delete_paper(paper["id"])
+    assert deletion.status == "active_runs"
+    assert get_paper(paper["id"]) is not None
 
     update_run_status(run["id"], "failed", completed=True, current_step="failed")
     assert paper_has_active_runs(paper["id"]) is False
+
+
+def test_delete_paper_reports_not_found(isolated_settings):
+    init_db()
+
+    deletion = delete_paper("missing-paper")
+
+    assert deletion.status == "not_found"
+    assert deletion.paper is None
 
 
 def test_analysis_job_lifecycle_and_recovery(isolated_settings):
@@ -309,6 +397,7 @@ def test_analysis_job_lifecycle_and_recovery(isolated_settings):
 
     assert job["status"] == "pending"
     assert claim_analysis_job(run["id"]) == "claimed"
+    assert claim_analysis_job(run["id"]) == "busy"
     assert get_analysis_job(run["id"])["attempts"] == 1
     assert fail_analysis_job(run["id"], "temporary") == "pending"
     assert list_recoverable_analysis_jobs()[0]["run_id"] == run["id"]

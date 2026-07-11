@@ -14,6 +14,7 @@ from app.core.database import (
 from app.schemas.chunks import ChunkMetadata, PaperChunk
 from app.services.llm_client import LLMClient
 from app.services.retrieval import retrieve_context
+from app.services.usage_tracking import track_llm_usage
 
 logger = logging.getLogger(__name__)
 
@@ -164,21 +165,22 @@ def answer_question(
     system_header = QA_SYSTEM_PROMPT_ZH if language == "zh" else QA_SYSTEM_PROMPT_EN
     full_system = f"{system_header}\n\n{system_prompt}"
 
-    messages = build_messages_with_summary(
-        history, question, model_name=model_name, language=language,
-    )
-
-    try:
-        answer = client.chat(system_prompt=full_system, messages=messages)
-    except Exception:
-        logger.warning("Q&A LLM call failed", exc_info=True)
-        fallback = (
-            "抱歉，回答生成失败，请稍后重试。"
-            if language == "zh"
-            else "Sorry, answer generation failed. Please try again later."
+    with track_llm_usage(run_id):
+        messages = build_messages_with_summary(
+            history, question, model_name=model_name, language=language,
         )
-        assistant_msg = save_qa_message(run_id, paper_id, "assistant", fallback)
-        return user_msg, assistant_msg
+
+        try:
+            answer = client.chat(system_prompt=full_system, messages=messages)
+        except Exception:
+            logger.warning("Q&A LLM call failed", exc_info=True)
+            fallback = (
+                "抱歉，回答生成失败，请稍后重试。"
+                if language == "zh"
+                else "Sorry, answer generation failed. Please try again later."
+            )
+            assistant_msg = save_qa_message(run_id, paper_id, "assistant", fallback)
+            return user_msg, assistant_msg
 
     assistant_msg = save_qa_message(run_id, paper_id, "assistant", answer)
     return user_msg, assistant_msg

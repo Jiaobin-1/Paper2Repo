@@ -1,148 +1,29 @@
 from __future__ import annotations
 
-import logging
-import uuid
-from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 
-from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Query, UploadFile
-
-from app.agents.graph import run_analysis
 from app.core.config import get_settings
 from app.core.database import (
-    claim_analysis_job,
-    complete_analysis_job,
     create_analysis_job,
     create_batch_id,
     create_paper,
     create_run,
     delete_paper,
-    fail_analysis_job,
+    delete_run,
     get_paper,
-    get_paper_storage_paths,
-    get_run,
-    is_analysis_cancel_requested,
     list_papers,
-    list_recoverable_analysis_jobs,
     list_runs,
-    paper_has_active_runs,
-    update_run_status,
 )
 from app.schemas.paper import BatchStartResponse, BatchUploadResponse, PaperResponse, RunListItemResponse, RunResponse
-
-logger = logging.getLogger(__name__)
+from app.services import analysis_runner
+from app.services.storage_maintenance import delete_managed_file
+from app.services.uploads import save_pdf_upload, save_pdf_uploads
 
 router = APIRouter(
     prefix="/papers",
     tags=["papers"],
     responses={404: {"description": "Paper not found"}},
 )
-PDF_SIGNATURE = b"%PDF-"
-UPLOAD_CHUNK_SIZE = 1024 * 1024
-_analysis_executor: ThreadPoolExecutor | None = None
-
-
-def _get_analysis_executor() -> ThreadPoolExecutor:
-    """Single bounded pool for all single-run analysis work.
-
-    Keeps heavy LLM/embedding jobs off the request-handling threadpool and caps
-    concurrency at ANALYSIS_MAX_WORKERS so a burst of uploads cannot starve the
-    API. Batch analysis keeps its own transient pool.
-    """
-    global _analysis_executor
-    if _analysis_executor is None:
-        max_workers = max(1, get_settings().analysis_max_workers)
-        _analysis_executor = ThreadPoolExecutor(
-            max_workers=max_workers,
-            thread_name_prefix="analysis",
-        )
-    return _analysis_executor
-
-
-def run_analysis_background(paper_id: str, run_id: str, pdf_path: str, model_name: str | None) -> None:
-    def record_progress(current_step: str, progress_percent: int) -> None:
-        if is_analysis_cancel_requested(run_id):
-            raise RuntimeError("Analysis canceled.")
-        update_run_status(
-            run_id,
-            "running",
-            current_step=current_step,
-            progress_percent=progress_percent,
-        )
-
-    try:
-        claim_status = claim_analysis_job(run_id)
-        if claim_status == "completed":
-            return
-        if claim_status == "canceled":
-            update_run_status(
-                run_id,
-                "failed",
-                error_message="Analysis canceled.",
-                completed=True,
-                current_step="failed",
-            )
-            return
-        update_run_status(run_id, "running", current_step="queued", progress_percent=0)
-        run_analysis(
-            paper_id=paper_id,
-            run_id=run_id,
-            pdf_path=pdf_path,
-            model_name=model_name,
-            progress_callback=record_progress,
-        )
-        update_run_status(
-            run_id,
-            "completed",
-            completed=True,
-            current_step="completed",
-            progress_percent=100,
-        )
-        complete_analysis_job(run_id)
-    except Exception as exc:
-        logger.exception("Analysis failed for run %s", run_id)
-        try:
-            job_status = fail_analysis_job(run_id, str(exc))
-            if job_status == "pending":
-                update_run_status(run_id, "pending", error_message=str(exc), current_step="queued")
-            elif job_status == "canceled":
-                update_run_status(
-                    run_id,
-                    "failed",
-                    error_message="Analysis canceled.",
-                    completed=True,
-                    current_step="failed",
-                )
-            else:
-                update_run_status(
-                    run_id,
-                    "failed",
-                    error_message=str(exc),
-                    completed=True,
-                    current_step="failed",
-                )
-        except Exception:
-            logger.exception("Failed to update run status after error for run %s", run_id)
-
-
-def start_recoverable_analysis_jobs() -> None:
-    jobs = list_recoverable_analysis_jobs()
-    if not jobs:
-        return
-    executor = _get_analysis_executor()
-    for job in jobs:
-        paper = get_paper(job["paper_id"])
-        run = get_run(job["run_id"])
-        if not paper:
-            fail_analysis_job(job["run_id"], "Paper record was not found during recovery.")
-            continue
-        executor.submit(
-            run_analysis_background,
-            job["paper_id"],
-            job["run_id"],
-            paper["file_path"],
-            run.get("model_name") if run else None,
-        )
 
 
 @router.post(
@@ -152,60 +33,10 @@ def start_recoverable_analysis_jobs() -> None:
     description="Upload a PDF file for analysis. Validates file type (PDF only) and size limit.",
 )
 def upload_paper(file: UploadFile = File(...)) -> PaperResponse:
-    if not file.filename or not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only PDF files are supported.")
-
     settings = get_settings()
-    settings.upload_path.mkdir(parents=True, exist_ok=True)
-    safe_name = Path(file.filename).name
-    if len(safe_name) > 200:
-        suffix = Path(safe_name).suffix[:10]
-        safe_name = safe_name[:200 - len(suffix)] + suffix
-    stored_name = f"{uuid.uuid4()}_{safe_name}"
-    file_path = settings.upload_path / stored_name
-
-    try:
-        file_size = _save_limited_upload(file, file_path, settings.upload_max_bytes)
-        _validate_pdf_signature(file_path)
-    except HTTPException:
-        _delete_if_exists(file_path)
-        raise
-    except Exception as exc:
-        _delete_if_exists(file_path)
-        raise HTTPException(status_code=400, detail="Failed to save uploaded PDF.") from exc
-    finally:
-        file.file.close()
-
-    paper = create_paper(filename=safe_name, file_path=file_path, file_size=file_size)
+    saved = save_pdf_upload(file, settings.upload_path, settings.upload_max_bytes)
+    paper = create_paper(filename=saved.filename, file_path=saved.file_path, file_size=saved.file_size)
     return PaperResponse(**paper)
-
-
-def _save_limited_upload(file: UploadFile, file_path: Path, max_bytes: int) -> int:
-    total_size = 0
-    with file_path.open("wb") as buffer:
-        while True:
-            chunk = file.file.read(UPLOAD_CHUNK_SIZE)
-            if not chunk:
-                break
-            total_size += len(chunk)
-            if total_size > max_bytes:
-                max_mb = max_bytes // (1024 * 1024)
-                raise HTTPException(status_code=400, detail=f"PDF file is too large. Maximum size is {max_mb} MB.")
-            buffer.write(chunk)
-    return total_size
-
-
-def _validate_pdf_signature(file_path: Path) -> None:
-    with file_path.open("rb") as saved_file:
-        if saved_file.read(len(PDF_SIGNATURE)) != PDF_SIGNATURE:
-            raise HTTPException(status_code=400, detail="Uploaded file is not a valid PDF.")
-
-
-def _delete_if_exists(file_path: Path) -> None:
-    try:
-        file_path.unlink(missing_ok=True)
-    except OSError:
-        logger.warning("Failed to remove partial upload %s", file_path, exc_info=True)
 
 
 @router.get(
@@ -235,23 +66,25 @@ def get_paper_detail(paper_id: str) -> PaperResponse:
     "/{paper_id}",
     response_model=PaperResponse,
     summary="Delete a paper",
-    description="Delete a paper and all completed/failed analysis data, reports, chunks, embeddings, citations, and local files.",
+    description=(
+        "Delete a paper and all completed/failed analysis data, reports, chunks, "
+        "embeddings, citations, usage records, and managed local files."
+    ),
 )
 def delete_paper_detail(paper_id: str) -> PaperResponse:
-    paper = get_paper(paper_id)
-    if not paper:
+    deletion = delete_paper(paper_id)
+    if deletion.status == "not_found":
         raise HTTPException(status_code=404, detail="Paper not found.")
-    if paper_has_active_runs(paper_id):
+    if deletion.status == "active_runs":
         raise HTTPException(status_code=409, detail="Paper has pending or running analyses.")
+    if deletion.paper is None:
+        raise RuntimeError("Paper deletion completed without the deleted paper record.")
 
-    storage_paths = get_paper_storage_paths(paper_id)
-    deleted_paper = delete_paper(paper_id)
-    if not deleted_paper:
-        raise HTTPException(status_code=404, detail="Paper not found.")
-
-    for path in storage_paths:
-        _delete_if_exists(Path(path))
-    return PaperResponse(**deleted_paper)
+    upload_path = str(deletion.paper["file_path"])
+    for path in deletion.storage_paths:
+        area = "uploads" if path == upload_path else "reports"
+        delete_managed_file(path, area=area)
+    return PaperResponse(**deletion.paper)
 
 
 @router.get(
@@ -280,9 +113,11 @@ def start_run(paper_id: str) -> RunResponse:
 
     run = create_run(paper_id)
     create_analysis_job(run["id"], paper_id)
-    _get_analysis_executor().submit(
-        run_analysis_background, paper_id, run["id"], paper["file_path"], run.get("model_name")
-    )
+    try:
+        analysis_runner.submit_analysis(paper_id, run["id"], paper["file_path"], run.get("model_name"))
+    except analysis_runner.AnalysisQueueFullError as exc:
+        delete_run(run["id"])
+        raise HTTPException(status_code=503, detail=str(exc), headers={"Retry-After": "5"}) from exc
     return RunResponse(**run)
 
 
@@ -303,38 +138,10 @@ def upload_batch(files: list[UploadFile] = File(...)) -> BatchUploadResponse:
         raise HTTPException(status_code=400, detail="Maximum 20 files per batch.")
 
     settings = get_settings()
-    settings.upload_path.mkdir(parents=True, exist_ok=True)
-    total_size = 0
+    saved_uploads = save_pdf_uploads(files, settings.upload_path, MAX_BATCH_FILE_SIZE, MAX_BATCH_TOTAL_SIZE)
     uploaded: list[PaperResponse] = []
-
-    for file in files:
-        if not file.filename or not file.filename.lower().endswith(".pdf"):
-            raise HTTPException(status_code=400, detail=f"Only PDF files are supported. Rejected: {file.filename}")
-
-        safe_name = Path(file.filename).name
-        if len(safe_name) > 200:
-            suffix = Path(safe_name).suffix[:10]
-            safe_name = safe_name[:200 - len(suffix)] + suffix
-        stored_name = f"{uuid.uuid4()}_{safe_name}"
-        file_path = settings.upload_path / stored_name
-
-        try:
-            file_size = _save_limited_upload(file, file_path, MAX_BATCH_FILE_SIZE)
-            total_size += file_size
-            if total_size > MAX_BATCH_TOTAL_SIZE:
-                _delete_if_exists(file_path)
-                raise HTTPException(status_code=400, detail=f"Total batch size exceeds {MAX_BATCH_TOTAL_SIZE // (1024 * 1024)} MB limit.")
-            _validate_pdf_signature(file_path)
-        except HTTPException:
-            _delete_if_exists(file_path)
-            raise
-        except Exception as exc:
-            _delete_if_exists(file_path)
-            raise HTTPException(status_code=400, detail="Failed to save uploaded PDF.") from exc
-        finally:
-            file.file.close()
-
-        paper = create_paper(filename=safe_name, file_path=file_path, file_size=file_size)
+    for saved in saved_uploads:
+        paper = create_paper(filename=saved.filename, file_path=saved.file_path, file_size=saved.file_size)
         uploaded.append(PaperResponse(**paper))
 
     return BatchUploadResponse(papers=uploaded)
@@ -344,11 +151,10 @@ def upload_batch(files: list[UploadFile] = File(...)) -> BatchUploadResponse:
     "/batch-start",
     response_model=BatchStartResponse,
     summary="Start batch analysis",
-    description="Start parallel analysis for multiple papers. Uses thread pool with max 3 workers.",
+    description="Start parallel analysis for multiple papers using the configured bounded worker queue.",
 )
 def start_batch(
     paper_ids: str = Query(..., description="Comma-separated paper IDs"),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
 ) -> BatchStartResponse:
     ids = [pid.strip() for pid in paper_ids.split(",") if pid.strip()]
     if not ids:
@@ -356,36 +162,32 @@ def start_batch(
 
     batch_id = create_batch_id()
     runs: list[RunResponse] = []
+    tasks: list[analysis_runner.AnalysisRunRequest] = []
+    papers = []
 
     for pid in ids:
         paper = get_paper(pid)
         if not paper:
             raise HTTPException(status_code=404, detail=f"Paper not found: {pid}")
+        papers.append((pid, paper))
+
+    for pid, paper in papers:
         run = create_run(pid, batch_id=batch_id)
         create_analysis_job(run["id"], pid)
+        tasks.append(
+            analysis_runner.AnalysisRunRequest(
+                paper_id=pid,
+                run_id=run["id"],
+                pdf_path=paper["file_path"],
+                model_name=run.get("model_name"),
+            )
+        )
         runs.append(RunResponse(**run))
 
-    def _run_batch() -> None:
-        max_workers = max(1, get_settings().analysis_max_workers)
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = []
-            for pid, run_resp in zip(ids, runs, strict=False):
-                paper = get_paper(pid)
-                if paper:
-                    futures.append(
-                        executor.submit(
-                            run_analysis_background,
-                            pid,
-                            run_resp.id,
-                            paper["file_path"],
-                            run_resp.model_name,
-                        )
-                    )
-            for future in futures:
-                try:
-                    future.result()
-                except Exception:
-                    logger.exception("Batch analysis task failed")
-
-    background_tasks.add_task(_run_batch)
+    try:
+        analysis_runner.submit_batch_analysis(tasks)
+    except analysis_runner.AnalysisQueueFullError as exc:
+        for run_response in runs:
+            delete_run(run_response.id)
+        raise HTTPException(status_code=503, detail=str(exc), headers={"Retry-After": "5"}) from exc
     return BatchStartResponse(batch_id=batch_id, runs=runs)

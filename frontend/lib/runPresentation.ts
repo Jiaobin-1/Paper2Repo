@@ -1,4 +1,4 @@
-import type { LanguageCode, Run } from "./types";
+import type { LanguageCode, QueueStatus, Run } from "./types";
 
 export const WORKFLOW_STEPS = [
   { key: "parse_pdf_node", label: { zh: "解析 PDF", en: "Parse PDF" } },
@@ -83,6 +83,27 @@ export function formatRunStatusWithProgress(run: Run | null, language: LanguageC
     return language === "en" ? "Not started" : "等待启动";
   }
   return `${formatRunStatus(run.status, language)} · ${displayProgressPercent(run)}%`;
+}
+
+export function formatQueueStatus(queue: QueueStatus | null, language: LanguageCode = "zh"): string {
+  if (!queue) {
+    return language === "en" ? "Queue status unknown" : "队列状态未知";
+  }
+  const availability = language === "en"
+    ? `${queue.available_slots}/${queue.capacity} slots available`
+    : `${queue.available_slots}/${queue.capacity} 个提交槽可用`;
+  const active = language === "en"
+    ? `${queue.running_submissions} running, ${queue.queued_submissions} queued`
+    : `${queue.running_submissions} 个运行中，${queue.queued_submissions} 个排队中`;
+  return `${queue.is_full ? formatQueueBusy(language) : formatQueueAvailable(language)} · ${availability} · ${active}`;
+}
+
+function formatQueueAvailable(language: LanguageCode): string {
+  return language === "en" ? "Available" : "可提交";
+}
+
+function formatQueueBusy(language: LanguageCode): string {
+  return language === "en" ? "Busy" : "队列忙";
 }
 
 export function formatRunTiming(run: Run, language: LanguageCode = "zh", now: Date = new Date()): string {

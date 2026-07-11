@@ -32,11 +32,11 @@ class TestSplitText:
         assert result[0].startswith("A")
         assert result[1].startswith("B")
 
-    def test_long_text_not_split_when_no_paragraph_breaks(self):
+    def test_long_text_is_split_even_without_paragraph_breaks(self):
         text = "x" * 3000
         result = _split_text(text, max_chars=1000)
-        assert len(result) == 1
-        assert result[0] == text
+        assert len(result) == 3
+        assert all(len(chunk) == 1000 for chunk in result)
 
 
 class TestEstimateTokens:
@@ -87,3 +87,26 @@ class TestChunkParsedPaper:
         result = chunk_parsed_paper(parsed, max_chars=1500)
         for i, chunk in enumerate(result.chunks):
             assert chunk.metadata.chunk_index == i
+
+    def test_tables_and_formulas_are_added_to_retrievable_content(self):
+        parsed = ParsedPaper(
+            raw_text="Method",
+            page_texts=[
+                PageText(
+                    page_number=1,
+                    text="Method",
+                    tables=["| Dataset | F1 |\n| --- | --- |\n| SampleBench | 0.91 |"],
+                    formulas=["loss = cross_entropy(y, p)"],
+                )
+            ],
+            section_candidates=[],
+            page_count=1,
+            table_count=1,
+            formula_count=1,
+        )
+
+        result = chunk_parsed_paper(parsed)
+
+        combined = "\n".join(chunk.content for chunk in result.chunks)
+        assert "SampleBench" in combined
+        assert "loss = cross_entropy" in combined

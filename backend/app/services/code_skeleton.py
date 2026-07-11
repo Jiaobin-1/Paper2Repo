@@ -1,14 +1,23 @@
 from __future__ import annotations
 
+import json
 import logging
+import re
+import shlex
 import tempfile
 import zipfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from app.core.database import get_analysis_result, get_paper, get_run
 
 logger = logging.getLogger(__name__)
+
+MAX_CODE_STRUCTURE_ITEMS = 200
+MAX_ARCHIVE_PATH_LENGTH = 240
+MAX_ARCHIVE_PATH_PART_LENGTH = 100
+RESERVED_ARCHIVE_MEMBERS = frozenset({".gitignore", "README.md", "PLAN.md", "requirements.txt"})
+_WINDOWS_DRIVE_PATTERN = re.compile(r"^[A-Za-z]:")
 
 _GITIGNORE = """\
 __pycache__/
@@ -64,8 +73,7 @@ def generate_skeleton_zip(run_id: str) -> Path:
         _add_readme(zf, paper_title, goal, scope, steps, modules)
         _add_plan(zf, steps, checklist, modules)
         _add_structure(zf, code_structure, modules, paper_title)
-        if not any(item.get("path") == "requirements.txt" for item in code_structure):
-            _add_requirements(zf, modules)
+        _add_requirements(zf, modules)
 
     return zip_path
 
@@ -167,23 +175,76 @@ def _add_structure(
     paper_title: str,
 ) -> None:
     module_map = {m.get("name", ""): m for m in modules}
+    used_members = {name.casefold() for name in zf.namelist()}
+    used_members.update(name.casefold() for name in RESERVED_ARCHIVE_MEMBERS)
 
-    for item in code_structure:
-        path = item.get("path", "")
+    for item in code_structure[:MAX_CODE_STRUCTURE_ITEMS]:
+        raw_path = str(item.get("path", ""))
+        path = _safe_archive_path(raw_path)
         item_type = item.get("type", "file")
-        purpose = item.get("purpose", "")
-        todo = item.get("todo", "")
+        purpose = str(item.get("purpose", ""))
+        todo = str(item.get("todo", ""))
 
-        if item_type == "directory":
-            zf.writestr(f"{path}/.gitkeep", "")
+        if path is None:
+            logger.warning("Skipping unsafe generated skeleton path: %r", raw_path)
             continue
 
-        if not path:
+        if item_type == "directory":
+            member = f"{path}/.gitkeep"
+            if _archive_path_conflicts(member, used_members):
+                logger.warning("Skipping conflicting generated skeleton path: %r", raw_path)
+                continue
+            zf.writestr(member, "")
+            used_members.add(member.casefold())
+            continue
+
+        if item_type != "file":
+            logger.warning("Skipping generated skeleton path with unknown type %r: %r", item_type, raw_path)
+            continue
+
+        if _archive_path_conflicts(path, used_members):
+            logger.warning("Skipping conflicting generated skeleton path: %r", raw_path)
             continue
 
         ext = Path(path).suffix.lower()
         content = _generate_file_content(path, ext, purpose, todo, module_map, paper_title)
         zf.writestr(path, content)
+        used_members.add(path.casefold())
+
+
+def _safe_archive_path(path_value: str) -> str | None:
+    """Return a portable relative ZIP member path or reject unsafe input."""
+    raw = path_value.strip().replace("\\", "/")
+    if not raw or raw.startswith("/") or _WINDOWS_DRIVE_PATTERN.match(raw):
+        return None
+    raw = raw.rstrip("/")
+    if not raw or len(raw) > MAX_ARCHIVE_PATH_LENGTH:
+        return None
+    if any(ord(char) < 32 for char in raw):
+        return None
+
+    parts = raw.split("/")
+    if any(
+        part in {"", ".", ".."}
+        or len(part) > MAX_ARCHIVE_PATH_PART_LENGTH
+        or part.rstrip(" .") != part
+        for part in parts
+    ):
+        return None
+    return PurePosixPath(*parts).as_posix()
+
+
+def _archive_path_conflicts(member: str, used_members: set[str]) -> bool:
+    key = member.casefold()
+    if key in used_members:
+        return True
+
+    parents = PurePosixPath(member).parents
+    if any(str(parent).casefold() in used_members for parent in parents if str(parent) != "."):
+        return True
+
+    prefix = f"{key.rstrip('/')}/"
+    return any(existing.startswith(prefix) for existing in used_members)
 
 
 def _generate_file_content(
@@ -206,7 +267,7 @@ def _generate_file_content(
         return _sh_stub(basename, purpose)
     if basename.lower() == "readme":
         return f"# {paper_title}\n\n{purpose}\n"
-    return f"# {purpose}\n# TODO: {todo}\n"
+    return f"# {_single_line(purpose)}\n# TODO: {_single_line(todo)}\n"
 
 
 def _py_stub(
@@ -215,19 +276,20 @@ def _py_stub(
     todo: str,
     module_map: dict[str, dict[str, Any]],
 ) -> str:
+    purpose_text = str(purpose)
+    todo_text = str(todo)
+    class_name = _python_class_name(name)
     lines = [
-        '"""',
-        f"{purpose}",
-        '"""',
+        json.dumps(purpose_text, ensure_ascii=False),
         "",
     ]
 
     related = module_map.get(name)
     if related:
         if related.get("inputs"):
-            lines.append(f"# Expected inputs: {', '.join(related['inputs'])}")
+            lines.append(f"# Expected inputs: {_single_line(', '.join(map(str, related['inputs'])))}")
         if related.get("outputs"):
-            lines.append(f"# Expected outputs: {', '.join(related['outputs'])}")
+            lines.append(f"# Expected outputs: {_single_line(', '.join(map(str, related['outputs'])))}")
         lines.append("")
 
     if name == "data" or "data" in name.lower():
@@ -236,8 +298,8 @@ def _py_stub(
             "from torch.utils.data import Dataset, DataLoader",
             "",
             "",
-            f"class {name.title().replace('_', '')}Dataset(Dataset):",
-            f'    """{purpose}"""',
+            f"class {class_name}Dataset(Dataset):",
+            f"    {json.dumps(purpose_text, ensure_ascii=False)}",
             "",
             "    def __init__(self, data_path: str):",
             "        # TODO: Load and preprocess data",
@@ -251,8 +313,8 @@ def _py_stub(
             "",
             "",
             "def get_dataloader(data_path: str, batch_size: int = 32, shuffle: bool = True) -> DataLoader:",
-            f'    """Create a DataLoader for {name}."""',
-            f"    dataset = {name.title().replace('_', '')}Dataset(data_path)",
+            f"    {json.dumps(f'Create a DataLoader for {name}.', ensure_ascii=False)}",
+            f"    dataset = {class_name}Dataset(data_path)",
             "    return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)",
             "",
         ])
@@ -262,7 +324,7 @@ def _py_stub(
             "",
             "",
             "def train(config_path: str):",
-            f'    """{purpose}"""',
+            f"    {json.dumps(purpose_text, ensure_ascii=False)}",
             "    # TODO: Implement training loop",
             "    raise NotImplementedError",
             "",
@@ -280,7 +342,7 @@ def _py_stub(
             "",
             "",
             "def evaluate(model_path: str, data_path: str):",
-            f'    """{purpose}"""',
+            f"    {json.dumps(purpose_text, ensure_ascii=False)}",
             "    # TODO: Implement evaluation",
             "    raise NotImplementedError",
             "",
@@ -294,31 +356,30 @@ def _py_stub(
             "",
         ])
     else:
-        class_name = "".join(w.title() for w in name.replace("-", "_").split("_"))
         lines.extend([
             "",
             "",
             f"class {class_name}:",
-            f'    """{purpose}"""',
+            f"    {json.dumps(purpose_text, ensure_ascii=False)}",
             "",
             "    def __init__(self):",
             "        # TODO: Initialize",
             "        pass",
             "",
             "    def run(self):",
-            f'        """TODO: {todo}"""',
+            f"        {json.dumps(f'TODO: {todo_text}', ensure_ascii=False)}",
             "        raise NotImplementedError",
             "",
         ])
 
-    if todo:
-        lines.extend([f"# TODO: {todo}", ""])
+    if todo_text:
+        lines.extend([f"# TODO: {_single_line(todo_text)}", ""])
 
     return "\n".join(lines)
 
 
 def _yaml_stub(name: str, purpose: str) -> str:
-    return f"""# {purpose}
+    return f"""# {_single_line(purpose)}
 # TODO: Configure parameters
 
 model:
@@ -337,23 +398,39 @@ training:
 
 
 def _json_stub(name: str, purpose: str) -> str:
-    return f"""{{
-  "_comment": "{purpose}",
-  "model": {{}},
-  "data": {{}},
-  "training": {{}}
-}}
-"""
+    return json.dumps(
+        {
+            "_comment": purpose,
+            "model": {},
+            "data": {},
+            "training": {},
+        },
+        ensure_ascii=False,
+        indent=2,
+    ) + "\n"
 
 
 def _sh_stub(name: str, purpose: str) -> str:
+    message = shlex.quote(f"Running {name}...")
     return f"""#!/bin/bash
-# {purpose}
+# {_single_line(purpose)}
 set -euo pipefail
 
 # TODO: Add commands
-echo "Running {name}..."
+echo {message}
 """
+
+
+def _single_line(value: str) -> str:
+    return " ".join(str(value).splitlines()).strip()
+
+
+def _python_class_name(value: str) -> str:
+    words = re.findall(r"[A-Za-z0-9]+", value)
+    class_name = "".join(word[:1].upper() + word[1:] for word in words) or "GeneratedModule"
+    if class_name[0].isdigit():
+        class_name = f"Generated{class_name}"
+    return class_name
 
 
 def _add_requirements(zf: zipfile.ZipFile, modules: list[dict[str, Any]]) -> None:

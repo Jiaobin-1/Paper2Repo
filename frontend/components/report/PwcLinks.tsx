@@ -1,0 +1,62 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useAppLanguage } from "@/hooks/useAppLanguage";
+import { getPwcLinks } from "@/lib/api";
+import { logError } from "@/lib/logError";
+import { text } from "@/lib/i18n";
+import type { PwcLink } from "@/lib/types";
+
+const TYPE_LABELS: Record<string, { zh: string; en: string }> = {
+  paper: { zh: "论文", en: "Paper" },
+  method: { zh: "方法", en: "Method" },
+  keyword: { zh: "关键词", en: "Keyword" },
+  contribution: { zh: "贡献", en: "Contribution" },
+};
+
+export default function PwcLinks({ runId }: { runId: string }) {
+  const language = useAppLanguage();
+  const [links, setLinks] = useState<PwcLink[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    setLoaded(false);
+    setLinks([]);
+    getPwcLinks(runId)
+      .then((data) => {
+        if (isMounted) {
+          setLinks(data);
+          setLoaded(true);
+        }
+      })
+      .catch((error) => {
+        logError("Failed to load Papers With Code links", error);
+        if (isMounted) {
+          setLoaded(true);
+        }
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [runId]);
+
+  if (!loaded || links.length === 0) return null;
+
+  return (
+    <section className="panel stack">
+      <h2>{text(language, "pwcTitle")}</h2>
+      <p className="muted">{text(language, "pwcHint")}</p>
+      <ul className="pwc-links">
+        {links.map((link, i) => (
+          <li key={i} className="pwc-link-item">
+            <a href={link.url} target="_blank" rel="noopener noreferrer" className="pwc-link">
+              {link.label}
+            </a>
+            <span className="pwc-type">{TYPE_LABELS[link.type]?.[language] ?? link.type}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}

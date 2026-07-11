@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query, Response
 from fastapi.responses import FileResponse
+from starlette.background import BackgroundTask
 
+from app.core.config import get_settings
 from app.core.database import (
     delete_run,
     get_analysis_result,
+    get_llm_usage_summary,
     get_report,
     get_run,
     get_runs_by_batch,
@@ -16,11 +18,13 @@ from app.core.database import (
     request_analysis_cancel,
     update_run_status,
 )
-from app.schemas.paper import BatchStatusResponse, RunListItemResponse, RunResponse
+from app.schemas.paper import BatchStatusResponse, QueueStatusResponse, RunListItemResponse, RunResponse
+from app.services import analysis_runner
 from app.services.code_skeleton import generate_skeleton_zip
-from app.services.html_exporter import build_report_html
-from app.services.latex_exporter import build_report_latex
-from app.services.pdf_exporter import build_report_pdf
+from app.services.reports.html import build_report_html
+from app.services.reports.latex import build_report_latex
+from app.services.reports.pdf import build_report_pdf
+from app.services.storage_maintenance import cleanup_temp_file, delete_managed_file
 
 router = APIRouter(
     prefix="/runs",
@@ -40,6 +44,16 @@ def get_runs(
     limit: int = Query(20, ge=1, le=100, description="Maximum number of results"),
 ) -> list[RunListItemResponse]:
     return [RunListItemResponse(**run) for run in list_runs(paper_id=paper_id, limit=limit)]
+
+
+@router.get(
+    "/queue",
+    response_model=QueueStatusResponse,
+    summary="Get analysis queue status",
+    description="Return bounded worker queue capacity, active submissions, and retry guidance.",
+)
+def get_queue_status() -> QueueStatusResponse:
+    return QueueStatusResponse(**analysis_runner.get_analysis_queue_status())
 
 
 @router.get(
@@ -71,6 +85,22 @@ def get_run_detail(run_id: str) -> RunResponse:
     return RunResponse(**run)
 
 
+@router.get(
+    "/{run_id}/usage",
+    summary="Get LLM usage for a run",
+    description="Return token totals, estimated cost, latency, and per-call usage for analysis and Q&A.",
+)
+def get_run_usage(run_id: str) -> dict:
+    if not get_run(run_id):
+        raise HTTPException(status_code=404, detail="Run not found.")
+    summary = get_llm_usage_summary(run_id)
+    settings = get_settings()
+    summary["cost_estimation_configured"] = (
+        settings.llm_input_cost_per_million > 0 or settings.llm_output_cost_per_million > 0
+    )
+    return summary
+
+
 @router.delete(
     "/{run_id}",
     response_model=RunResponse,
@@ -88,7 +118,7 @@ def delete_run_detail(run_id: str) -> RunResponse:
     if not deleted_run:
         raise HTTPException(status_code=404, detail="Run not found.")
     if report and report.get("file_path"):
-        Path(report["file_path"]).unlink(missing_ok=True)
+        delete_managed_file(report["file_path"], area="reports")
     return RunResponse(**deleted_run)
 
 
@@ -288,4 +318,5 @@ def download_skeleton(run_id: str) -> FileResponse:
         path=str(zip_path),
         media_type="application/zip",
         filename=f"skeleton_{run_id[:8]}.zip",
+        background=BackgroundTask(cleanup_temp_file, zip_path),
     )

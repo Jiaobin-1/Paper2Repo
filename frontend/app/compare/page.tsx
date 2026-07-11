@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { compareRuns, getAvailableRuns } from "../../lib/api";
-import { text } from "../../lib/i18n";
-import { useAppLanguage } from "../../lib/useAppLanguage";
-import type { AvailableRun, ComparisonRun } from "../../lib/types";
+import { useAppLanguage } from "@/hooks/useAppLanguage";
+import { compareRuns, getAvailableRuns } from "@/lib/api";
+import { text } from "@/lib/i18n";
+import type { AvailableRun, ComparisonRun } from "@/lib/types";
 
 export default function ComparePage() {
   const language = useAppLanguage();

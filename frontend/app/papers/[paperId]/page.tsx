@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { listRuns } from "../../../lib/api";
-import { text } from "../../../lib/i18n";
-import { displayProgressPercent, formatRunStatus } from "../../../lib/runPresentation";
-import { useAppLanguage } from "../../../lib/useAppLanguage";
-import type { RunListItem } from "../../../lib/types";
+import { useAppLanguage } from "@/hooks/useAppLanguage";
+import { listRuns } from "@/lib/api";
+import { text } from "@/lib/i18n";
+import { displayProgressPercent, formatRunStatus } from "@/lib/runPresentation";
+import type { RunListItem } from "@/lib/types";
 
 export default function PaperDetailPage({ params }: { params: Promise<{ paperId: string }> }) {
   const language = useAppLanguage();

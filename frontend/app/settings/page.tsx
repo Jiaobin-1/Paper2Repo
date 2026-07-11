@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { checkLlmConnection, getAppSettings, updateAppSettings } from "../../lib/api";
-import { text } from "../../lib/i18n";
-import { SETTINGS_UPDATED_EVENT, useAppLanguage } from "../../lib/useAppLanguage";
-import type { AppSettings, LanguageCode, ThemeMode } from "../../lib/types";
+import { SETTINGS_UPDATED_EVENT, useAppLanguage } from "@/hooks/useAppLanguage";
+import { checkLlmConnection, cleanupStorage, getAppSettings, getStorageSummary, updateAppSettings } from "@/lib/api";
+import { formatFileSize } from "@/lib/format";
+import { text } from "@/lib/i18n";
+import InfoBlock from "@/components/shared/InfoBlock";
+import type { AppSettings, LanguageCode, StorageSummary, ThemeMode } from "@/lib/types";
 
 export default function SettingsPage() {
   const language = useAppLanguage();
@@ -14,19 +16,27 @@ export default function SettingsPage() {
   const [reportLanguage, setReportLanguage] = useState<LanguageCode>("en");
   const [theme, setTheme] = useState<ThemeMode>("light");
   const [message, setMessage] = useState(text(language, "settingsLoadFailed"));
+  const [storage, setStorage] = useState<StorageSummary | null>(null);
+  const [storageMessage, setStorageMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isChecking, setIsChecking] = useState(false);
+  const [isCleaningStorage, setIsCleaningStorage] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
-    getAppSettings()
-      .then((loadedSettings) => {
+    Promise.all([
+      getAppSettings(),
+      getStorageSummary().catch(() => null),
+    ])
+      .then(([loadedSettings, loadedStorage]) => {
         if (!isMounted) return;
         setSettings(loadedSettings);
         setDefaultModel(loadedSettings.default_model);
         setUiLanguage(loadedSettings.ui_language);
         setReportLanguage(loadedSettings.report_language);
         setTheme(loadedSettings.theme);
+        setStorage(loadedStorage);
+        setStorageMessage(loadedStorage ? "" : text(language, "storageLoadFailed"));
         setMessage("");
       })
       .catch((error) => {
@@ -72,6 +82,24 @@ export default function SettingsPage() {
       setMessage(error instanceof Error ? error.message : text(language, "modelCheckFailed"));
     } finally {
       setIsChecking(false);
+    }
+  }
+
+  async function handleCleanupStorage() {
+    setIsCleaningStorage(true);
+    try {
+      const result = await cleanupStorage(false);
+      const latest = await getStorageSummary();
+      setStorage(latest);
+      setStorageMessage(
+        result.deleted_file_count > 0
+          ? `${text(language, "cleanupDone")} ${result.deleted_file_count} files · ${formatFileSize(result.deleted_bytes)}`
+          : text(language, "cleanupNone"),
+      );
+    } catch (error) {
+      setStorageMessage(error instanceof Error ? error.message : text(language, "storageLoadFailed"));
+    } finally {
+      setIsCleaningStorage(false);
     }
   }
 
@@ -158,6 +186,45 @@ export default function SettingsPage() {
         </div>
 
         {message ? <p className="muted">{message}</p> : null}
+      </section>
+
+      <section className="panel stack">
+        <div className="section-header">
+          <div>
+            <h2>{text(language, "storageTitle")}</h2>
+            <p className="muted">{text(language, "storageDesc")}</p>
+          </div>
+          <button
+            className="button secondary"
+            type="button"
+            disabled={!storage || storage.orphan_file_count === 0 || isCleaningStorage}
+            onClick={handleCleanupStorage}
+          >
+            {isCleaningStorage ? text(language, "cleaningStorage") : text(language, "cleanupStorage")}
+          </button>
+        </div>
+
+        <div className="grid">
+          <InfoBlock title={text(language, "storageTotal")} value={storage ? formatFileSize(storage.total_bytes) : text(language, "notRecorded")} />
+          <InfoBlock
+            title={text(language, "storageUploads")}
+            value={storage ? `${formatFileSize(storage.uploads.byte_count)} · ${storage.uploads.file_count}` : text(language, "notRecorded")}
+          />
+          <InfoBlock
+            title={text(language, "storageReports")}
+            value={storage ? `${formatFileSize(storage.reports.byte_count)} · ${storage.reports.file_count}` : text(language, "notRecorded")}
+          />
+          <InfoBlock
+            title={text(language, "storageDatabase")}
+            value={storage ? formatFileSize(storage.database.byte_count) : text(language, "notRecorded")}
+          />
+          <InfoBlock
+            title={text(language, "storageOrphans")}
+            value={storage ? `${formatFileSize(storage.orphan_bytes)} · ${storage.orphan_file_count}` : text(language, "notRecorded")}
+          />
+        </div>
+
+        {storageMessage ? <p className="muted">{storageMessage}</p> : null}
       </section>
     </main>
   );

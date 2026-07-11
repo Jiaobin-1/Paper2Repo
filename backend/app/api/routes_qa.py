@@ -15,6 +15,7 @@ from app.services.qa_service import (
     build_messages_with_summary,
     build_qa_context,
 )
+from app.services.usage_tracking import track_llm_usage
 
 router = APIRouter(
     prefix="/runs",
@@ -88,9 +89,10 @@ def ask_question_stream(run_id: str, payload: QaRequest):
 
     system_prompt, _chunks = build_qa_context(run_id, paper_id, payload.question)
     history = get_qa_history(run_id)
-    messages = build_messages_with_summary(
-        history, payload.question, model_name=model_name, language=language,
-    )
+    with track_llm_usage(run_id):
+        messages = build_messages_with_summary(
+            history, payload.question, model_name=model_name, language=language,
+        )
 
     system_header = QA_SYSTEM_PROMPT_ZH if language == "zh" else QA_SYSTEM_PROMPT_EN
     full_system = f"{system_header}\n\n{system_prompt}"
@@ -116,18 +118,19 @@ def ask_question_stream(run_id: str, payload: QaRequest):
                 saved_msg = save_qa_message(run_id, paper_id, "assistant", full_response)
             return saved_msg
 
-        try:
-            for token in client.chat_stream(system_prompt=full_system, messages=messages):
-                full_response += token
-                yield f"data: {json.dumps({'type': 'token', 'content': token}, ensure_ascii=False)}\n\n"
-        except GeneratorExit:
-            save_once()
-            raise
-        except Exception:
-            error_msg = "回答生成失败，请稍后重试。" if language == "zh" else "Failed to generate answer. Please try again."
-            if not full_response:
-                full_response = error_msg
-            yield f"data: {json.dumps({'type': 'error', 'content': error_msg}, ensure_ascii=False)}\n\n"
+        with track_llm_usage(run_id):
+            try:
+                for token in client.chat_stream(system_prompt=full_system, messages=messages):
+                    full_response += token
+                    yield f"data: {json.dumps({'type': 'token', 'content': token}, ensure_ascii=False)}\n\n"
+            except GeneratorExit:
+                save_once()
+                raise
+            except Exception:
+                error_msg = "回答生成失败，请稍后重试。" if language == "zh" else "Failed to generate answer. Please try again."
+                if not full_response:
+                    full_response = error_msg
+                yield f"data: {json.dumps({'type': 'error', 'content': error_msg}, ensure_ascii=False)}\n\n"
 
         assistant_msg = save_once()
         if assistant_msg is None:
