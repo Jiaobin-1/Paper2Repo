@@ -106,6 +106,7 @@ PDF / arXiv
 | `OPENAI_TIMEOUT_SECONDS` | LLM request timeout | `60` |
 | `LLM_INPUT_COST_PER_MILLION` | Input-token price used for cost estimates | `0` |
 | `LLM_OUTPUT_COST_PER_MILLION` | Output-token price used for cost estimates | `0` |
+| `API_AUTH_TOKEN` | Optional Bearer token for proxy-fronted/programmatic `/api/*` access | not set |
 | `DATABASE_URL` | SQLite database URL | `sqlite:///./data/paper2repo.db` |
 | `UPLOAD_MAX_MB` | Single upload size limit | `50` |
 | `PDF_MAX_PAGES` | Maximum pages parsed from one PDF | `300` |
@@ -116,6 +117,7 @@ PDF / arXiv
 | `ANALYSIS_MAX_QUEUED_JOBS` | Maximum waiting jobs beyond active workers | `20` |
 | `ANALYSIS_JOB_LEASE_SECONDS` | Worker lease before an interrupted job can be reclaimed | `3600` |
 | `ANALYSIS_RECOVERY_INTERVAL_SECONDS` | Periodic interrupted-job recovery interval | `30` |
+| `STORAGE_CLEANUP_MIN_AGE_HOURS` | Minimum age before unreferenced upload/report files are cleanup candidates | `24` |
 
 ## Project Structure
 
@@ -160,8 +162,8 @@ npm run test:e2e
 
 Current local verification baseline:
 
-- `pytest`: 206 tests
-- `vitest`: 42 tests
+- `pytest`: 222 tests
+- `vitest`: 43 tests
 - `Playwright`: 21 mocked UI tests plus 1 real frontend-backend flow
 
 Run the real full-stack flow locally with a Python environment that has the backend dependencies installed:
@@ -174,7 +176,11 @@ npm run test:e2e:fullstack
 If the backend dependencies live in the documented Conda environment, set
 `FULLSTACK_BACKEND_COMMAND="conda run -n agent-learning python -m uvicorn app.main:app --host 127.0.0.1 --port 8000"`.
 
-The deterministic quality benchmark uses the local fallback pipeline and exits non-zero when a checked-in paper case falls below its configured score. Add cases in `backend/benchmarks/quality_cases.json` as report expectations mature.
+The deterministic quality benchmark uses the local fallback pipeline and exits non-zero when a checked-in paper case falls below its configured score. It now checks report quality signals such as evidence coverage, low-confidence items, and fallback-template usage. Add cases in `backend/benchmarks/quality_cases.json` as report expectations mature.
+
+The Settings page exposes local storage usage and can clean orphan upload/report files that are no longer referenced by SQLite and are older than `STORAGE_CLEANUP_MIN_AGE_HOURS`.
+
+`API_AUTH_TOKEN` is opt-in. Leave it empty for the local browser UI. When set, every `/api/*` request must send `Authorization: Bearer <token>`; this mode is intended for a reverse proxy that injects the header or for programmatic clients, because ordinary browser download links cannot attach it.
 
 Docker includes English and Simplified Chinese Tesseract data. Manual installations need a local Tesseract runtime for OCR; set `PDF_OCR_LANGUAGE=eng+chi_sim` when both languages are required. OCR failure never blocks native PDF text extraction.
 

@@ -5,7 +5,7 @@ import ReactMarkdown from "react-markdown";
 import { useAppLanguage } from "@/hooks/useAppLanguage";
 import { formatFileSize } from "@/lib/format";
 import { text } from "@/lib/i18n";
-import { formatRunStatusWithProgress } from "@/lib/runPresentation";
+import { formatQueueStatus, formatRunStatusWithProgress } from "@/lib/runPresentation";
 import InfoBlock from "@/components/shared/InfoBlock";
 import PaperDropZone from "./PaperDropZone";
 import { WorkflowProgress } from "../report/RunProgress";
@@ -41,6 +41,11 @@ export default function PaperUpload() {
         <button className="button secondary" type="button" disabled={!upload.paper || upload.isUploading || upload.isAnalyzing} onClick={upload.handleAnalyze}>
           {upload.isAnalyzing ? text(language, "analyzing") : text(language, "startAnalysis")}
         </button>
+        {upload.queueRetryAvailable ? (
+          <button className="button secondary" type="button" disabled={!upload.paper || upload.isUploading || upload.isAnalyzing} onClick={upload.handleAnalyze}>
+            {text(language, "retrySubmit")}
+          </button>
+        ) : null}
       </div>
 
       <p className="muted upload-message" aria-live="polite">{upload.message}</p>
@@ -48,6 +53,7 @@ export default function PaperUpload() {
       <div className="grid">
         <InfoBlock title={text(language, "taskStatus")} value={formatRunStatusWithProgress(upload.run, language)} />
         <InfoBlock title={text(language, "analysisModel")} value={upload.run?.model_name || upload.settings?.default_model || text(language, "loadingModelConfig")} />
+        <InfoBlock title={text(language, "queueStatus")} value={formatQueueStatus(upload.queueStatus, language)} />
       </div>
 
       {upload.run ? <WorkflowProgress run={upload.run} /> : null}

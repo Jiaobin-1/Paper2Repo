@@ -1,5 +1,5 @@
 import { apiUrl, requestJson } from "./client";
-import type { BatchStatusResponse, LlmUsageSummary, Report, Run, RunListItem } from "../types";
+import type { BatchStatusResponse, LlmUsageSummary, QueueStatus, Report, Run, RunListItem } from "../types";
 
 type GetRunOptions = {
   signal?: AbortSignal;
@@ -31,6 +31,10 @@ export function getReport(runId: string): Promise<Report> {
 
 export function getRunUsage(runId: string): Promise<LlmUsageSummary> {
   return requestJson<LlmUsageSummary>(`/api/runs/${runId}/usage`, {}, "模型用量加载失败。");
+}
+
+export function getQueueStatus(): Promise<QueueStatus> {
+  return requestJson<QueueStatus>("/api/runs/queue", {}, "队列状态加载失败。");
 }
 
 export function getReportPdfUrl(runId: string): string {

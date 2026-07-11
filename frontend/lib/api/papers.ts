@@ -1,44 +1,30 @@
-import { apiUrl, formatApiError, requestJson } from "./client";
+import { requestJson } from "./client";
 import type { BatchStartResponse, BatchUploadResponse, Paper, Run } from "../types";
 
-export async function uploadPaper(file: File): Promise<Paper> {
+export function uploadPaper(file: File): Promise<Paper> {
   const formData = new FormData();
   formData.append("file", file);
-
-  const response = await fetch(apiUrl("/api/papers/upload"), {
-    method: "POST",
-    body: formData,
-  });
-
-  if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    throw new Error(formatApiError(body?.detail ?? "上传失败。"));
-  }
-
-  return response.json();
+  return requestJson<Paper>(
+    "/api/papers/upload",
+    { method: "POST", body: formData },
+    "上传失败。",
+  );
 }
 
 export function startAnalysis(paperId: string): Promise<Run> {
   return requestJson<Run>(`/api/papers/${paperId}/runs`, { method: "POST" }, "分析启动失败。");
 }
 
-export async function uploadPapers(files: File[]): Promise<BatchUploadResponse> {
+export function uploadPapers(files: File[]): Promise<BatchUploadResponse> {
   const formData = new FormData();
   for (const file of files) {
     formData.append("files", file);
   }
-
-  const response = await fetch(apiUrl("/api/papers/upload-batch"), {
-    method: "POST",
-    body: formData,
-  });
-
-  if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    throw new Error(formatApiError(body?.detail ?? "Batch upload failed."));
-  }
-
-  return response.json();
+  return requestJson<BatchUploadResponse>(
+    "/api/papers/upload-batch",
+    { method: "POST", body: formData },
+    "Batch upload failed.",
+  );
 }
 
 export function startBatchAnalysis(paperIds: string[]): Promise<BatchStartResponse> {

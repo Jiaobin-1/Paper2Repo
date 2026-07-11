@@ -2,6 +2,8 @@
 
 import { useAppLanguage } from "@/hooks/useAppLanguage";
 import { text } from "@/lib/i18n";
+import { formatQueueStatus } from "@/lib/runPresentation";
+import InfoBlock from "@/components/shared/InfoBlock";
 import BatchDropZone from "./BatchDropZone";
 import BatchFileList from "./BatchFileList";
 import { useBatchUpload } from "./hooks/useBatchUpload";
@@ -30,9 +32,18 @@ export default function BatchUpload() {
         <button className="button secondary" type="button" disabled={!batch.hasUploaded || batch.isBusy} onClick={batch.handleStartAnalysis}>
           {batch.isAnalyzing ? text(language, "analyzing") : text(language, "batchStartAll")}
         </button>
+        {batch.queueRetryAvailable ? (
+          <button className="button secondary" type="button" disabled={!batch.hasUploaded || batch.isBusy} onClick={batch.handleStartAnalysis}>
+            {text(language, "retrySubmit")}
+          </button>
+        ) : null}
       </div>
 
       <p className="muted">{batch.message}</p>
+
+      <div className="grid">
+        <InfoBlock title={text(language, "queueStatus")} value={formatQueueStatus(batch.queueStatus, language)} />
+      </div>
 
       <BatchFileList
         analyzingCount={batch.analyzingCount}

@@ -10,6 +10,7 @@ from app.api.routes_pwc import router as pwc_router
 from app.api.routes_qa import router as qa_router
 from app.api.routes_runs import router as runs_router
 from app.api.routes_settings import router as settings_router
+from app.api.routes_storage import router as storage_router
 
 api_router = APIRouter(prefix="/api")
 
@@ -19,6 +20,7 @@ api_router.include_router(runs_router)
 api_router.include_router(citations_router)
 api_router.include_router(llm_router)
 api_router.include_router(settings_router)
+api_router.include_router(storage_router)
 api_router.include_router(qa_router)
 api_router.include_router(compare_router)
 api_router.include_router(knowledge_router)

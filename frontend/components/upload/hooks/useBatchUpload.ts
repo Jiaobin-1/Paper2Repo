@@ -2,11 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { DragEvent } from "react";
-import { startBatchAnalysis, uploadPapers } from "@/lib/api";
+import { getQueueStatus, startBatchAnalysis, uploadPapers } from "@/lib/api";
+import { ApiError } from "@/lib/api/client";
 import { batchCompletionMessage } from "@/lib/batchPresentation";
 import { text } from "@/lib/i18n";
 import { pollRunUntilTerminal } from "@/lib/runPolling";
-import type { LanguageCode, Paper, Run } from "@/lib/types";
+import type { LanguageCode, Paper, QueueStatus, Run } from "@/lib/types";
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
 const MAX_FILES = 20;
@@ -26,6 +27,8 @@ export function useBatchUpload(language: LanguageCode) {
   const [isUploading, setIsUploading] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [message, setMessage] = useState(text(language, "batchDropHint"));
+  const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null);
+  const [queueRetryAvailable, setQueueRetryAvailable] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const dragCountRef = useRef(0);
@@ -34,6 +37,20 @@ export function useBatchUpload(language: LanguageCode) {
   useEffect(() => {
     return () => {
       pollingAbortRef.current?.abort();
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    getQueueStatus()
+      .then((status) => {
+        if (isMounted) {
+          setQueueStatus(status);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      isMounted = false;
     };
   }, []);
 
@@ -101,6 +118,7 @@ export function useBatchUpload(language: LanguageCode) {
     const pendingFiles = files.filter((file) => file.status === "pending");
     if (pendingFiles.length === 0) return;
     setIsUploading(true);
+    setQueueRetryAvailable(false);
     setMessage(text(language, "batchUploading"));
     setFiles((prev) =>
       prev.map((item) =>
@@ -149,16 +167,25 @@ export function useBatchUpload(language: LanguageCode) {
     pollingAbortRef.current = abortController;
 
     setIsAnalyzing(true);
+    setQueueRetryAvailable(false);
     setMessage(text(language, "batchStarting"));
 
     try {
       const paperIds = uploaded.map((file) => file.paper!.id);
+      const beforeStartQueue = await getQueueStatus().catch(() => null);
+      if (beforeStartQueue) {
+        setQueueStatus(beforeStartQueue);
+      }
       const batchResult = await startBatchAnalysis(paperIds);
+      const afterStartQueue = await getQueueStatus().catch(() => null);
+      if (afterStartQueue) {
+        setQueueStatus(afterStartQueue);
+      }
 
       setFiles((prev) =>
         prev.map((item) => {
           const run = batchResult.runs.find((candidate) => candidate.paper_id === item.paper?.id);
-          return run ? { ...item, run, status: "analyzing" as const } : item;
+          return run ? { ...item, run, status: "analyzing" as const, error: null } : item;
         }),
       );
 
@@ -203,6 +230,16 @@ export function useBatchUpload(language: LanguageCode) {
       setMessage(batchCompletionMessage(completedRuns, language));
     } catch (error) {
       if (abortController.signal.aborted) return;
+      if (error instanceof ApiError && error.status === 503) {
+        const waitSeconds = error.retryAfterSeconds ?? queueStatus?.retry_after_seconds ?? 5;
+        setQueueRetryAvailable(true);
+        setMessage(`${text(language, "queueFullRetry")} ${language === "en" ? "Retry after" : "建议等待"} ${waitSeconds}s.`);
+        const latestQueue = await getQueueStatus().catch(() => null);
+        if (latestQueue) {
+          setQueueStatus(latestQueue);
+        }
+        return;
+      }
       setMessage(error instanceof Error ? error.message : text(language, "backendOffline"));
     } finally {
       if (pollingAbortRef.current === abortController) {
@@ -238,6 +275,8 @@ export function useBatchUpload(language: LanguageCode) {
     isUploading,
     message,
     pendingCount,
+    queueRetryAvailable,
+    queueStatus,
     removeFile,
     uploadedCount,
     uploadingCount,

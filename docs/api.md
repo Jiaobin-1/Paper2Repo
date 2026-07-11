@@ -4,6 +4,10 @@ Paper2Repo exposes a local FastAPI API for uploads, background analysis, reports
 
 Start the backend and open `http://127.0.0.1:8000/docs` for Swagger UI.
 
+## Authentication
+
+Authentication is disabled by default for local use. If `API_AUTH_TOKEN` is set, every `/api/*` request must include `Authorization: Bearer <token>`. `/health`, API documentation, and CORS preflight requests remain available without the token. Token mode is intended for reverse-proxy or programmatic access; the browser UI's direct download links cannot attach authorization headers.
+
 ## Health
 
 - `GET /health`
@@ -23,6 +27,7 @@ Analysis-start endpoints return `503 Service Unavailable` with `Retry-After: 5` 
 ## Runs And Reports
 
 - `GET /api/runs`: list runs, optionally `paper_id` and `limit`.
+- `GET /api/runs/queue`: get bounded worker queue capacity, active submissions, available slots, and retry guidance.
 - `GET /api/runs/batches/{batch_id}`: get batch status.
 - `GET /api/runs/{run_id}`: get run status.
 - `GET /api/runs/{run_id}/usage`: get LLM token totals, estimated cost, latency, and per-call details.
@@ -65,3 +70,8 @@ Analysis-start endpoints return `503 Service Unavailable` with `Retry-After: 5` 
 - `GET /api/llm/config`: get LLM configuration.
 - `PUT /api/llm/config`: update the default model.
 - `POST /api/llm/check`: run a short model connectivity check for the current default model.
+
+## Storage
+
+- `GET /api/storage/summary`: get upload, report, database, and orphan-file storage statistics.
+- `POST /api/storage/cleanup`: clean orphan files under managed storage directories. Use `dry_run=true` to preview candidates.

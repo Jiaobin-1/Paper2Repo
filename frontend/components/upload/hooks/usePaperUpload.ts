@@ -2,13 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { DragEvent } from "react";
-import { getAppSettings, getReport, startAnalysis, uploadPaper } from "@/lib/api";
+import { getAppSettings, getQueueStatus, getReport, startAnalysis, uploadPaper } from "@/lib/api";
+import { ApiError } from "@/lib/api/client";
 import { SETTINGS_UPDATED_EVENT } from "@/hooks/useAppLanguage";
 import { formatFileSize } from "@/lib/format";
 import { text } from "@/lib/i18n";
 import { formatProgressMessage } from "@/lib/runPresentation";
 import { pollRunUntilTerminal } from "@/lib/runPolling";
-import type { AppSettings, LanguageCode, Paper, Report, Run } from "@/lib/types";
+import type { AppSettings, LanguageCode, Paper, QueueStatus, Report, Run } from "@/lib/types";
 
 const MAX_PDF_SIZE_BYTES = 50 * 1024 * 1024;
 
@@ -19,6 +20,8 @@ export function usePaperUpload(language: LanguageCode) {
   const [report, setReport] = useState<Report | null>(null);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [message, setMessage] = useState(text(language, "selectPdfStart"));
+  const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null);
+  const [queueRetryAvailable, setQueueRetryAvailable] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -29,6 +32,20 @@ export function usePaperUpload(language: LanguageCode) {
   useEffect(() => {
     return () => {
       pollingAbortRef.current?.abort();
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    getQueueStatus()
+      .then((status) => {
+        if (isMounted) {
+          setQueueStatus(status);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      isMounted = false;
     };
   }, []);
 
@@ -125,6 +142,7 @@ export function usePaperUpload(language: LanguageCode) {
     setPaper(null);
     setRun(null);
     setReport(null);
+    setQueueRetryAvailable(false);
     setMessage(text(language, "uploadingPdf"));
     try {
       const uploadedPaper = await uploadPaper(file);
@@ -151,11 +169,20 @@ export function usePaperUpload(language: LanguageCode) {
     setIsAnalyzing(true);
     setRun(null);
     setReport(null);
+    setQueueRetryAvailable(false);
     setMessage(text(language, "analysisStarting"));
     try {
+      const beforeStartQueue = await getQueueStatus().catch(() => null);
+      if (beforeStartQueue) {
+        setQueueStatus(beforeStartQueue);
+      }
       const startedRun = await startAnalysis(paper.id);
       setRun(startedRun);
-      setMessage(text(language, "analysisQueued"));
+      setMessage(startedRun.current_step === "queued" ? text(language, "queuedWaiting") : text(language, "analysisQueued"));
+      const afterStartQueue = await getQueueStatus().catch(() => null);
+      if (afterStartQueue) {
+        setQueueStatus(afterStartQueue);
+      }
 
       const terminalRun = await pollRunUntilTerminal(
         startedRun.id,
@@ -189,6 +216,16 @@ export function usePaperUpload(language: LanguageCode) {
       if (abortController.signal.aborted) {
         return;
       }
+      if (error instanceof ApiError && error.status === 503) {
+        const waitSeconds = error.retryAfterSeconds ?? queueStatus?.retry_after_seconds ?? 5;
+        setQueueRetryAvailable(true);
+        setMessage(`${text(language, "queueFullRetry")} ${language === "en" ? "Retry after" : "建议等待"} ${waitSeconds}s.`);
+        const latestQueue = await getQueueStatus().catch(() => null);
+        if (latestQueue) {
+          setQueueStatus(latestQueue);
+        }
+        return;
+      }
       setMessage(error instanceof Error ? error.message : text(language, "backendOffline"));
     } finally {
       if (pollingAbortRef.current === abortController) {
@@ -212,6 +249,8 @@ export function usePaperUpload(language: LanguageCode) {
     isUploading,
     message,
     paper,
+    queueRetryAvailable,
+    queueStatus,
     report,
     run,
     settings,

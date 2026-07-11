@@ -4,7 +4,7 @@
     "pdf": "tests/fixtures/sample.pdf",
     "expected_title_terms": ["Sample", "AI", "Paper"],
     "expected_dataset_terms": ["SampleBench", "accuracy", "F1"],
-    "required_report_terms": ["reproduction", "evidence", "SampleBench", "Document Extraction Summary"],
+    "required_report_terms": ["reproduction", "evidence", "SampleBench", "Document Extraction Summary", "Report Quality Signals"],
     "minimum_chunks": 1,
     "minimum_evidence_refs": 4,
     "minimum_report_chars": 2500,

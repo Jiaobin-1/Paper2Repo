@@ -6,6 +6,7 @@ import threading
 from collections.abc import Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
+from typing import Any
 
 from app.agents.graph import run_analysis
 from app.core.config import get_settings
@@ -54,6 +55,33 @@ def start_analysis_dispatcher() -> ThreadPoolExecutor:
             _analysis_executor = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="paper2repo-analysis")
             _submission_slots = threading.BoundedSemaphore(workers + queued_jobs)
         return _analysis_executor
+
+
+def get_analysis_queue_status() -> dict[str, Any]:
+    settings = get_settings()
+    max_workers = max(1, settings.analysis_max_workers)
+    max_queued_jobs = max(0, settings.analysis_max_queued_jobs)
+    capacity = max_workers + max_queued_jobs
+    with _futures_lock:
+        active_futures = [future for future in _submitted_futures.values() if not future.done()]
+        active_submissions = len(active_futures)
+        running_submissions = sum(1 for future in active_futures if future.running())
+    queued_submissions = max(0, active_submissions - running_submissions)
+    queue_counts = _run_queue_counts()
+    available_slots = max(0, capacity - active_submissions)
+    return {
+        "max_workers": max_workers,
+        "max_queued_jobs": max_queued_jobs,
+        "capacity": capacity,
+        "active_submissions": active_submissions,
+        "running_submissions": running_submissions,
+        "queued_submissions": queued_submissions,
+        "available_slots": available_slots,
+        "is_full": active_submissions >= capacity,
+        "retry_after_seconds": 5,
+        "pending_runs": queue_counts["pending"],
+        "running_runs": queue_counts["running"],
+    }
 
 
 def stop_analysis_dispatcher() -> None:
@@ -281,3 +309,21 @@ def _release_submission_slot() -> None:
     slots = _submission_slots
     if slots is not None:
         slots.release()
+
+
+def _run_queue_counts() -> dict[str, int]:
+    from app.core.database import get_connection
+
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT status, COUNT(*) AS count
+            FROM analysis_runs
+            WHERE status IN ('pending', 'running')
+            GROUP BY status
+            """
+        ).fetchall()
+    counts = {"pending": 0, "running": 0}
+    for row in rows:
+        counts[str(row["status"])] = int(row["count"])
+    return counts

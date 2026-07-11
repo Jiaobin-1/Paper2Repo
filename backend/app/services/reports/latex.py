@@ -2,6 +2,20 @@ from __future__ import annotations
 
 import re
 
+_LATEX_ESCAPE_MAP = {
+    "\\": r"\textbackslash{}",
+    "&": r"\&",
+    "%": r"\%",
+    "$": r"\$",
+    "#": r"\#",
+    "_": r"\_",
+    "{": r"\{",
+    "}": r"\}",
+    "~": r"\textasciitilde{}",
+    "^": r"\textasciicircum{}",
+}
+_LATEX_ESCAPE_PATTERN = re.compile(r"[\\&%$#_{}~^]")
+
 
 def build_report_latex(title: str, markdown: str) -> str:
     body = _markdown_to_latex(markdown)
@@ -39,7 +53,7 @@ def _markdown_to_latex(md: str) -> str:
     def flush_code() -> None:
         nonlocal code_lines
         if code_lines:
-            code_text = "\n".join(code_lines)
+            code_text = "\n".join(code_lines).replace(r"\end{Verbatim}", r"\\end{Verbatim}")
             lines.append(f"\\begin{{Verbatim}}[breaklines=true,fontsize=\\small]\n{code_text}\n\\end{{Verbatim}}")
             code_lines = []
 
@@ -149,10 +163,7 @@ def _wrap_enumerate(match: re.Match) -> str:
 
 
 def _escape_latex(text: str) -> str:
-    s = text
-    for ch, rep in [("&", "\\&"), ("%", "\\%"), ("$", "\\$"), ("#", "\\#"), ("_", "\\_"), ("{", "\\{"), ("}", "\\}"), ("~", "\\textasciitilde{}"), ("^", "\\textasciicircum{}")]:
-        s = s.replace(ch, rep)
-    return s
+    return _LATEX_ESCAPE_PATTERN.sub(lambda match: _LATEX_ESCAPE_MAP[match.group(0)], text)
 
 
 def _inline_latex(text: str) -> str:

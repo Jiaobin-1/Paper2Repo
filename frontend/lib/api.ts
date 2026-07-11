@@ -7,3 +7,4 @@ export * from "./api/pwc";
 export * from "./api/qa";
 export * from "./api/runs";
 export * from "./api/settings";
+export * from "./api/storage";

@@ -42,3 +42,17 @@ class BatchStartResponse(BaseModel):
 class BatchStatusResponse(BaseModel):
     batch_id: str
     runs: list[RunListItemResponse]
+
+
+class QueueStatusResponse(BaseModel):
+    max_workers: int
+    max_queued_jobs: int
+    capacity: int
+    active_submissions: int
+    running_submissions: int
+    queued_submissions: int
+    available_slots: int
+    is_full: bool
+    retry_after_seconds: int
+    pending_runs: int
+    running_runs: int

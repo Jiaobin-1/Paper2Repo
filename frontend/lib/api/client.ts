@@ -1,6 +1,18 @@
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 const NETWORK_ERROR_MESSAGE = "网络连接失败，请检查后端服务。";
 
+export class ApiError extends Error {
+  status: number;
+  retryAfterSeconds: number | null;
+
+  constructor(message: string, status: number, retryAfterSeconds: number | null = null) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
+
 export function apiUrl(path: string): string {
   return `${API_BASE_URL}${path}`;
 }
@@ -22,7 +34,11 @@ export async function requestJson<T>(
 
   if (!response.ok) {
     const body = await response.clone().json().catch(() => null);
-    throw new Error(formatApiError(body?.detail ?? fallbackMessage));
+    throw new ApiError(
+      formatApiError(body?.detail ?? fallbackMessage),
+      response.status,
+      parseRetryAfter(response.headers.get("Retry-After")),
+    );
   }
 
   return response.json();
@@ -57,4 +73,12 @@ export function isAbortError(error: unknown): boolean {
     "name" in error &&
     error.name === "AbortError"
   );
+}
+
+export function parseRetryAfter(value: string | null): number | null {
+  if (!value) {
+    return null;
+  }
+  const seconds = Number.parseInt(value, 10);
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds : null;
 }

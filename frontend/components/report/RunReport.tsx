@@ -3,11 +3,11 @@
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { useAppLanguage } from "@/hooks/useAppLanguage";
-import { getReport, getReportHtmlUrl, getReportLatexUrl, getReportMarkdownUrl, getReportPdfUrl, getRunUsage, getSkeletonUrl } from "@/lib/api";
+import { getQueueStatus, getReport, getReportHtmlUrl, getReportLatexUrl, getReportMarkdownUrl, getReportPdfUrl, getRunUsage, getSkeletonUrl } from "@/lib/api";
 import { text } from "@/lib/i18n";
-import { formatProgressMessage, formatRunStatusWithProgress } from "@/lib/runPresentation";
+import { formatProgressMessage, formatQueueStatus, formatRunStatusWithProgress } from "@/lib/runPresentation";
 import { pollRunUntilTerminal } from "@/lib/runPolling";
-import type { LlmUsageSummary, Report, Run } from "@/lib/types";
+import type { LlmUsageSummary, QueueStatus, Report, Run } from "@/lib/types";
 import { WorkflowProgress } from "./RunProgress";
 import QaPanel from "./QaPanel";
 import PwcLinks from "./PwcLinks";
@@ -19,6 +19,7 @@ export default function RunReport({ runId }: { runId: string }) {
   const [run, setRun] = useState<Run | null>(null);
   const [report, setReport] = useState<Report | null>(null);
   const [usage, setUsage] = useState<LlmUsageSummary | null>(null);
+  const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null);
   const [message, setMessage] = useState(text(language, "reportLoading"));
   const [fullscreen, setFullscreen] = useState(false);
 
@@ -31,6 +32,13 @@ export default function RunReport({ runId }: { runId: string }) {
         setReport(null);
         setUsage(null);
         setMessage(text(language, "reportLoading"));
+        getQueueStatus()
+          .then((status) => {
+            if (isMounted) {
+              setQueueStatus(status);
+            }
+          })
+          .catch(() => undefined);
         const terminalRun = await pollRunUntilTerminal(
           runId,
           {
@@ -64,6 +72,13 @@ export default function RunReport({ runId }: { runId: string }) {
           getReport(runId),
           getRunUsage(runId).catch(() => null),
         ]);
+        getQueueStatus()
+          .then((status) => {
+            if (isMounted) {
+              setQueueStatus(status);
+            }
+          })
+          .catch(() => undefined);
         if (!isMounted) return;
         setReport(loadedReport);
         setUsage(loadedUsage);
@@ -96,6 +111,7 @@ export default function RunReport({ runId }: { runId: string }) {
             <h2>{text(language, "taskOverview")}</h2>
             <InfoBlock title={text(language, "taskStatus")} value={run ? formatRunStatusWithProgress(run, language) : text(language, "reportLoading")} />
             <InfoBlock title={text(language, "analysisModel")} value={run?.model_name || text(language, "notRecorded")} />
+            <InfoBlock title={text(language, "queueStatus")} value={formatQueueStatus(queueStatus, language)} />
             {usage ? <InfoBlock title={text(language, "llmTokens")} value={usage.total_tokens.toLocaleString()} /> : null}
             {usage ? (
               <InfoBlock

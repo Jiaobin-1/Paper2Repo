@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     openai_timeout_seconds: float = 60.0
     llm_input_cost_per_million: float = 0.0
     llm_output_cost_per_million: float = 0.0
+    api_auth_token: str = ""
 
     database_url: str = "sqlite:///./data/paper2repo.db"
     upload_dir: str = "./storage/uploads"
@@ -44,6 +45,7 @@ class Settings(BaseSettings):
     analysis_job_lease_seconds: int = 3600
     analysis_job_max_attempts: int = 2
     analysis_recovery_interval_seconds: int = 30
+    storage_cleanup_min_age_hours: int = 24
 
     model_config = SettingsConfigDict(
         env_file=BACKEND_ROOT.parent / ".env",

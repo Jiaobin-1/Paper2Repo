@@ -1,7 +1,12 @@
-from fastapi import FastAPI
+import hmac
+from collections.abc import Awaitable, Callable
+
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, Response
 
 from app.api import api_router
+from app.core.config import get_settings
 from app.core.lifecycle import lifespan
 
 
@@ -24,6 +29,24 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.middleware("http")
+    async def require_api_token(
+        request: Request,
+        call_next: Callable[[Request], Awaitable[Response]],
+    ) -> Response:
+        token = get_settings().api_auth_token
+        api_path = request.url.path == "/api" or request.url.path.startswith("/api/")
+        guarded = bool(token) and api_path and request.method != "OPTIONS"
+        if guarded:
+            scheme, _, presented = request.headers.get("authorization", "").partition(" ")
+            if scheme.lower() != "bearer" or not hmac.compare_digest(presented, token):
+                return JSONResponse(
+                    {"detail": "Unauthorized"},
+                    status_code=401,
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+        return await call_next(request)
 
     @app.get("/health")
     def health() -> dict[str, str]:

@@ -15,9 +15,24 @@ export default function QaPanel({ runId }: { runId: string }) {
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const requestVersionRef = useRef(0);
+
+  useEffect(() => {
+    setLoading(false);
+    setInput("");
+    return () => {
+      requestVersionRef.current += 1;
+      const activeRequest = abortRef.current;
+      abortRef.current = null;
+      activeRequest?.abort();
+    };
+  }, [runId]);
 
   useEffect(() => {
     let isMounted = true;
+    setHistoryLoaded(false);
+    setMessages([]);
+    setError(null);
     getQaHistory(runId)
       .then((history) => {
         if (isMounted) {
@@ -27,7 +42,7 @@ export default function QaPanel({ runId }: { runId: string }) {
       })
       .catch(() => {
         if (isMounted) {
-      setError(text(language, "qaLoadHistoryError"));
+          setError(text(language, "qaLoadHistoryError"));
           setHistoryLoaded(true);
         }
       });
@@ -52,16 +67,21 @@ export default function QaPanel({ runId }: { runId: string }) {
     abortRef.current?.abort();
     const abortController = new AbortController();
     abortRef.current = abortController;
+    const requestVersion = requestVersionRef.current + 1;
+    requestVersionRef.current = requestVersion;
+    const requestKey = Date.now();
+    const assistantTempId = `tmp-assistant-${requestKey}`;
+    let assistantContent = "";
 
     const userMsg: QaMessage = {
-      id: `tmp-user-${Date.now()}`,
+      id: `tmp-user-${requestKey}`,
       run_id: runId,
       role: "user",
       content: question,
       created_at: new Date().toISOString(),
     };
     const assistantMsg: QaMessage = {
-      id: `tmp-assistant-${Date.now()}`,
+      id: assistantTempId,
       run_id: runId,
       role: "assistant",
       content: "",
@@ -73,53 +93,64 @@ export default function QaPanel({ runId }: { runId: string }) {
     try {
       const stream = askQuestionStream(runId, question, abortController.signal);
       for await (const event of stream) {
+        if (requestVersionRef.current !== requestVersion) return;
         if (event.type === "token" && event.content) {
-          assistantMsg.content += event.content;
+          assistantContent += event.content;
           setMessages((prev) =>
             prev.map((m) =>
-              m.id === assistantMsg.id ? { ...m, content: assistantMsg.content } : m,
+              m.id === assistantTempId ? { ...m, content: assistantContent } : m,
             ),
           );
         } else if (event.type === "done" && event.message_id) {
-          assistantMsg.id = event.message_id;
           setMessages((prev) =>
             prev.map((m) =>
-              m.id === assistantMsg.id || m.id.startsWith("tmp-assistant-")
-                ? { ...assistantMsg }
+              m.id === assistantTempId
+                ? { ...m, id: event.message_id!, content: assistantContent }
                 : m,
             ),
           );
         } else if (event.type === "error") {
           const message = event.content || text(language, "qaError");
-          assistantMsg.content = message;
+          assistantContent = message;
           setError(message);
           setMessages((prev) =>
             prev.map((m) =>
-              m.id === assistantMsg.id ? { ...m, content: assistantMsg.content } : m,
+              m.id === assistantTempId ? { ...m, content: assistantContent } : m,
             ),
           );
         }
       }
     } catch (err) {
+      if (requestVersionRef.current !== requestVersion) return;
       if (err instanceof DOMException && err.name === "AbortError") {
         setError(text(language, "qaStopped"));
         try {
-          setMessages(await getQaHistory(runId));
+          const history = await getQaHistory(runId);
+          if (requestVersionRef.current === requestVersion) {
+            setMessages(history);
+          }
         } catch {
           // Keep the optimistic partial message if history reload fails.
         }
         return;
       }
-      setError(text(language, "qaError"));
+      const message = text(language, "qaError");
+      assistantContent = message;
+      setError(message);
+      setMessages((prev) =>
+        prev.map((item) =>
+          item.id === assistantTempId ? { ...item, content: assistantContent } : item,
+        ),
+      );
     } finally {
-      if (abortRef.current === abortController) {
+      if (requestVersionRef.current === requestVersion && abortRef.current === abortController) {
         abortRef.current = null;
+        setLoading(false);
       }
-      setLoading(false);
     }
   }, [runId, input, loading, language]);
 
-  const handleStop = useCallback(async () => {
+  const handleStop = useCallback(() => {
     abortRef.current?.abort();
   }, []);
 

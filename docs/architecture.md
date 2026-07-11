@@ -52,12 +52,15 @@ parse_pdf_node
 - SQLite stores papers, chunks, runs, jobs, analysis JSON, reports, settings, Q&A messages, citations, embeddings, and per-run LLM usage events.
 - Uploaded PDFs and generated reports are local files under configurable storage directories.
 - Markdown reports are persisted; PDF, HTML, and LaTeX downloads are generated from stored Markdown content.
+- `/api/storage/summary` reports upload, report, database, and orphan-file usage. `/api/storage/cleanup` removes old unreferenced files under managed storage roots.
+- Code skeleton ZIP downloads are temporary files and are removed after the response is sent.
 - Embeddings are stored in SQLite for local knowledge search; retrieval uses a hybrid semantic/keyword score.
 
 ## Background Jobs
 
 - Each run creates a recoverable analysis job.
 - Single, batch, arXiv, and recovered runs share one worker pool controlled by `ANALYSIS_MAX_WORKERS`; `ANALYSIS_MAX_QUEUED_JOBS` bounds additional waiting work and overloaded start requests return `503`.
+- `/api/runs/queue` exposes capacity, active submissions, available slots, and retry guidance so the frontend can show queue pressure and retry affordances.
 - Leases are renewed at workflow progress boundaries; startup and periodic recovery reclaim interrupted jobs that are safe to retry.
 - Pending/running runs can be canceled through the API, and cancellation is checked before a run can be finalized as completed.
 
@@ -65,6 +68,7 @@ parse_pdf_node
 
 - Native PyMuPDF text remains the primary source. Sparse pages optionally use local Tesseract OCR and degrade to native text when OCR is unavailable.
 - Detected tables are normalized to Markdown and formula-like lines are added as labeled retrieval content without contaminating front-matter metadata extraction.
+- Generated reports include a quality-signal appendix with evidence coverage, low-confidence counts, missing/blocking items, fallback-template signals, and recoverable node errors.
 - `python -m scripts.run_quality_benchmark` runs checked-in deterministic paper cases and is a CI quality gate.
 - LLM calls made during analysis and Q&A persist token, latency, and configurable cost estimates per run; the report sidebar and `/api/runs/{run_id}/usage` expose the totals.
 
@@ -72,11 +76,14 @@ parse_pdf_node
 
 - Next.js rewrites `/api/*` to the FastAPI backend during local development.
 - The frontend polls run status and renders report/Q&A/download views when a run completes.
+- Upload, batch, and report pages show queue status; queue-full `503` responses keep uploaded files and present a retry action instead of forcing a new upload.
+- The Settings page shows local storage usage and triggers safe orphan-file cleanup.
 - Playwright uses mocked API responses for deterministic UI coverage and a separate real frontend-backend upload/report flow.
 
 ## Current Boundaries
 
-- No authentication or multi-user isolation.
+- Optional shared-secret authentication can guard `/api/*`, but there is no multi-user identity or data isolation.
+- Bearer-token mode targets reverse-proxy/programmatic access; direct browser download links do not attach the token.
 - No distributed worker queue; background work is local-process based.
 - No external vector database; embeddings are stored in local SQLite.
 - Full scientific reproduction is not generated automatically. The code skeleton is a structured starting point with TODOs and acceptance criteria.

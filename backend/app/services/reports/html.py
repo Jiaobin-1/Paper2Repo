@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import re
-from html import escape
+from html import escape, unescape
+from urllib.parse import urlsplit
 
 CSS = """\
 body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,sans-serif;max-width:800px;margin:0 auto;padding:40px 24px;color:#1a1a2e;background:#f4f2ee;line-height:1.7}
@@ -141,5 +142,18 @@ def _inline(text: str) -> str:
     s = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", s)
     s = re.sub(r"\*(.+?)\*", r"<em>\1</em>", s)
     s = re.sub(r"`(.+?)`", r"<code>\1</code>", s)
-    s = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r'<a href="\2">\1</a>', s)
+    s = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", _replace_link, s)
     return s
+
+
+def _replace_link(match: re.Match[str]) -> str:
+    label = match.group(1)
+    escaped_href = match.group(2)
+    raw_href = unescape(escaped_href).strip()
+    if not raw_href or any(ord(char) < 32 or ord(char) == 127 for char in raw_href):
+        return label
+
+    scheme = urlsplit(raw_href).scheme.lower()
+    if scheme and scheme not in {"http", "https", "mailto"}:
+        return label
+    return f'<a href="{escaped_href}" rel="noopener noreferrer">{label}</a>'

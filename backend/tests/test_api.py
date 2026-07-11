@@ -111,6 +111,46 @@ def test_start_run_returns_503_and_rolls_back_when_analysis_queue_is_full(isolat
     assert runs_response.json() == []
 
 
+def test_queue_status_endpoint_returns_capacity(isolated_settings):
+    with _client() as client:
+        response = client.get("/api/runs/queue")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["capacity"] == payload["max_workers"] + payload["max_queued_jobs"]
+    assert payload["available_slots"] <= payload["capacity"]
+    assert payload["retry_after_seconds"] == 5
+
+
+def test_storage_summary_and_cleanup_remove_orphan_files(isolated_settings, monkeypatch):
+    from app.core.config import get_settings
+
+    monkeypatch.setenv("STORAGE_CLEANUP_MIN_AGE_HOURS", "0")
+    get_settings.cache_clear()
+
+    uploads = isolated_settings / "uploads"
+    reports = isolated_settings / "reports"
+    uploads.mkdir(parents=True, exist_ok=True)
+    reports.mkdir(parents=True, exist_ok=True)
+    orphan_upload = uploads / "orphan.pdf"
+    orphan_report = reports / "orphan.md"
+    orphan_upload.write_bytes(b"%PDF-1.4\n%%EOF")
+    orphan_report.write_text("orphan", encoding="utf-8")
+
+    with _client() as client:
+        summary_response = client.get("/api/storage/summary")
+        cleanup_response = client.post("/api/storage/cleanup?dry_run=false")
+        after_response = client.get("/api/storage/summary")
+
+    assert summary_response.status_code == 200
+    assert summary_response.json()["orphan_file_count"] == 2
+    assert cleanup_response.status_code == 200
+    assert cleanup_response.json()["deleted_file_count"] == 2
+    assert not orphan_upload.exists()
+    assert not orphan_report.exists()
+    assert after_response.json()["orphan_file_count"] == 0
+
+
 def test_delete_completed_run_removes_it_from_api(isolated_settings, monkeypatch):
     from app.services import analysis_runner
 

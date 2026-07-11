@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.services.report_quality import evaluate_report_quality_signals
+
 
 def evaluate_analysis_quality(
     state: dict[str, Any],
@@ -27,6 +29,8 @@ def evaluate_analysis_quality(
     report_length_score = min(1.0, len(report) / minimum_report_chars)
     parsed = state.get("parsed_paper")
     extraction_score = 1.0 if parsed and getattr(parsed, "page_count", 0) > 0 else 0.0
+    quality_signals = evaluate_report_quality_signals(state, report)
+    quality_signal_score = float(quality_signals["score"])
 
     components = {
         "title_terms": round(title_score, 4),
@@ -36,15 +40,17 @@ def evaluate_analysis_quality(
         "chunks": round(chunk_score, 4),
         "report_length": round(report_length_score, 4),
         "extraction": round(extraction_score, 4),
+        "quality_signals": round(quality_signal_score, 4),
     }
     score = (
-        title_score * 0.20
+        title_score * 0.15
         + report_terms_score * 0.15
         + dataset_score * 0.15
-        + evidence_score * 0.20
+        + evidence_score * 0.15
         + chunk_score * 0.10
         + report_length_score * 0.10
         + extraction_score * 0.10
+        + quality_signal_score * 0.10
     )
     threshold = float(expectations.get("minimum_score", 0.75))
     return {
@@ -60,6 +66,7 @@ def evaluate_analysis_quality(
             "ocr_page_count": int(getattr(parsed, "ocr_page_count", 0) or 0) if parsed else 0,
             "table_count": int(getattr(parsed, "table_count", 0) or 0) if parsed else 0,
             "formula_count": int(getattr(parsed, "formula_count", 0) or 0) if parsed else 0,
+            "quality_signals": quality_signals,
         },
     }
 

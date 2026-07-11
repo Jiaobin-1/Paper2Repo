@@ -112,7 +112,20 @@ export default function RunHistory({ compact = false }: { compact?: boolean }) {
             </article>
           ))}
         </div>
-      ) : null}
+      ) : isLoading ? (
+        <div className="history-skeleton" aria-hidden="true">
+          <span className="skeleton skeleton-text" />
+          <span className="skeleton skeleton-text" />
+          <span className="skeleton skeleton-card" />
+        </div>
+      ) : (
+        <div className="history-empty">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M8 6h8M8 10h8M8 14h5M6 3h12a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V5a2 2 0 012-2z" />
+          </svg>
+          <p>{message}</p>
+        </div>
+      )}
     </section>
   );
 }

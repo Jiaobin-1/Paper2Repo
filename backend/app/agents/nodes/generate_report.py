@@ -3,6 +3,7 @@ import logging
 from app.agents.state import PaperAnalysisState
 from app.core.database import utc_now
 from app.schemas.report import MarkdownReport
+from app.services.report_quality import build_report_quality_appendix
 from app.services.reports.markdown import build_markdown_report
 
 logger = logging.getLogger(__name__)
@@ -38,6 +39,8 @@ def generate_report_node(state: PaperAnalysisState) -> PaperAnalysisState:
             parsed.formula_count,
             language,
         )
+
+    content += build_report_quality_appendix(state, content, language)
 
     metadata = state.get("metadata")
     title = metadata.title if metadata else "Analysis Report"
