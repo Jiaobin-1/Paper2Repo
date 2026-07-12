@@ -36,7 +36,12 @@ NODE_ORDER = [
 
 # Critical nodes: their output is required by downstream nodes.
 # If these fail, the whole pipeline must stop.
-CRITICAL_NODES = {"parse_pdf_node", "chunk_paper_node"}
+CRITICAL_NODES = {
+    "parse_pdf_node",
+    "chunk_paper_node",
+    "generate_report_node",
+    "persist_result_node",
+}
 
 ProgressCallback = Callable[[str, int], None]
 

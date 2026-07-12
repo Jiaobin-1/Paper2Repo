@@ -87,16 +87,6 @@ def ask_question_stream(run_id: str, payload: QaRequest):
 
     save_qa_message(run_id, paper_id, "user", payload.question)
 
-    system_prompt, _chunks = build_qa_context(run_id, paper_id, payload.question)
-    history = get_qa_history(run_id)
-    with track_llm_usage(run_id):
-        messages = build_messages_with_summary(
-            history, payload.question, model_name=model_name, language=language,
-        )
-
-    system_header = QA_SYSTEM_PROMPT_ZH if language == "zh" else QA_SYSTEM_PROMPT_EN
-    full_system = f"{system_header}\n\n{system_prompt}"
-
     client = LLMClient(model_name=model_name)
     if not client.is_configured():
         fallback = "LLM 未配置，无法生成回答。请在设置中配置 OpenAI API Key。" if language == "zh" else "LLM is not configured. Please set up the OpenAI API Key in settings."
@@ -107,6 +97,16 @@ def ask_question_stream(run_id: str, payload: QaRequest):
             yield f"data: {json.dumps({'type': 'done', 'message_id': assistant_msg['id']}, ensure_ascii=False)}\n\n"
 
         return StreamingResponse(_fallback_stream(), media_type="text/event-stream")
+
+    system_prompt, _chunks = build_qa_context(run_id, paper_id, payload.question)
+    history = get_qa_history(run_id)
+    with track_llm_usage(run_id):
+        messages = build_messages_with_summary(
+            history, payload.question, model_name=model_name, language=language,
+        )
+
+    system_header = QA_SYSTEM_PROMPT_ZH if language == "zh" else QA_SYSTEM_PROMPT_EN
+    full_system = f"{system_header}\n\n{system_prompt}"
 
     def _generate():
         full_response = ""

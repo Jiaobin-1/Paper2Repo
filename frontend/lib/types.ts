@@ -101,12 +101,12 @@ export type ComparisonRun = {
     overall_idea?: string;
   };
   method: {
-    method_name?: string;
-    pipeline_overview?: string;
-    key_innovations?: string[];
-    architecture?: string;
-    loss_functions?: string[];
-    training_strategy?: string;
+    method_summary: string;
+    module_names: string[];
+    system_framework: string;
+    key_formulas: string[];
+    pipeline_overview: string;
+    architecture: string;
   };
   experiments: {
     datasets?: string[];
@@ -115,10 +115,14 @@ export type ComparisonRun = {
     main_results?: string[];
   };
   reproduction: {
-    reproduction_goal?: string;
-    estimated_effort?: string;
-    risks?: string[];
-    checklist?: string[];
+    minimum_reproduction_goal: string;
+    full_reproduction_difficulty: string;
+    mvp_pipeline_feasibility: string;
+    risk_points: Array<{ risk: string; impact: string; mitigation: string }>;
+    experiment_checklist: Array<{ item: string; done: boolean }>;
+    reproduction_goal: string;
+    risks: string[];
+    checklist: string[];
   };
 };
 

@@ -1,11 +1,11 @@
 import { apiUrl, requestJson } from "./client";
 import type { BatchStatusResponse, LlmUsageSummary, QueueStatus, Report, Run, RunListItem } from "../types";
 
-type GetRunOptions = {
+type StatusRequestOptions = {
   signal?: AbortSignal;
 };
 
-export function getRun(runId: string, options: GetRunOptions = {}): Promise<Run> {
+export function getRun(runId: string, options: StatusRequestOptions = {}): Promise<Run> {
   return requestJson<Run>(`/api/runs/${runId}`, { signal: options.signal }, "任务状态加载失败。");
 }
 
@@ -57,6 +57,13 @@ export function getSkeletonUrl(runId: string): string {
   return apiUrl(`/api/runs/${runId}/skeleton`);
 }
 
-export function getBatchStatus(batchId: string): Promise<BatchStatusResponse> {
-  return requestJson<BatchStatusResponse>(`/api/runs/batches/${batchId}`, {}, "Batch status failed.");
+export function getBatchStatus(
+  batchId: string,
+  options: StatusRequestOptions = {},
+): Promise<BatchStatusResponse> {
+  return requestJson<BatchStatusResponse>(
+    `/api/runs/batches/${batchId}`,
+    { signal: options.signal },
+    "Batch status failed.",
+  );
 }

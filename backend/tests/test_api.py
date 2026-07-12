@@ -4,7 +4,14 @@ import time
 
 from fastapi.testclient import TestClient
 
-from app.core.database import create_paper, create_run, init_db, save_report, update_run_status
+from app.core.database import (
+    create_paper,
+    create_run,
+    init_db,
+    save_analysis_result,
+    save_report,
+    update_run_status,
+)
 from app.main import create_app
 
 
@@ -63,6 +70,18 @@ def test_upload_accepts_valid_pdf_and_start_run_success(isolated_settings, monke
 
     def fake_run_analysis(**kwargs):
         kwargs["progress_callback"]("parse_pdf_node", 35)
+        report_path = isolated_settings / f"{kwargs['run_id']}.md"
+        report_path.write_text("# Test report\n", encoding="utf-8")
+        save_analysis_result(kwargs["run_id"], kwargs["paper_id"], {})
+        save_report(kwargs["run_id"], kwargs["paper_id"], "Test report", "# Test report\n", report_path)
+        return {
+            "persist_result": {
+                "paper_id": kwargs["paper_id"],
+                "run_id": kwargs["run_id"],
+                "status": "completed",
+                "report_path": str(report_path),
+            }
+        }
 
     monkeypatch.setattr(analysis_runner, "run_analysis", fake_run_analysis)
 

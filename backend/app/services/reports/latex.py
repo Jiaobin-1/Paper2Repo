@@ -61,17 +61,18 @@ def _markdown_to_latex(md: str) -> str:
         nonlocal table_rows, in_table
         if not table_rows:
             return
-        ncols = len(table_rows[0]) if table_rows else 0
-        col_spec = "|" .join(["l"] * ncols)
+        ncols = max(len(row) for row in table_rows)
+        col_spec = "|".join(["l"] * ncols)
         lines.append(f"\\begin{{longtable}}{{|{col_spec}|}}")
         lines.append("\\hline")
         for i, row in enumerate(table_rows):
-            cells = " & ".join(_escape_latex(c) for c in row)
+            normalized_row = (row + [""] * ncols)[:ncols]
+            cells = " & ".join(_escape_latex(c) for c in normalized_row)
             lines.append(f"{cells} \\\\")
             lines.append("\\hline")
             if i == 0:
                 lines.append("\\hline")
-        lines.append("\\end{{longtable}}")
+        lines.append("\\end{longtable}")
         table_rows = []
         in_table = False
 

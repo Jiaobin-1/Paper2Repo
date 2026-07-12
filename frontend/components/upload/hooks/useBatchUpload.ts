@@ -4,9 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import type { DragEvent } from "react";
 import { getQueueStatus, startBatchAnalysis, uploadPapers } from "@/lib/api";
 import { ApiError } from "@/lib/api/client";
+import { pollBatchUntilTerminal } from "@/lib/batchPolling";
 import { batchCompletionMessage } from "@/lib/batchPresentation";
 import { text } from "@/lib/i18n";
-import { pollRunUntilTerminal } from "@/lib/runPolling";
 import type { LanguageCode, Paper, QueueStatus, Run } from "@/lib/types";
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
@@ -114,6 +114,12 @@ export function useBatchUpload(language: LanguageCode) {
     setFiles((prev) => prev.filter((_, itemIndex) => itemIndex !== index));
   }
 
+  function refreshQueueStatus() {
+    void getQueueStatus()
+      .then(setQueueStatus)
+      .catch(() => undefined);
+  }
+
   async function handleUpload() {
     const pendingFiles = files.filter((file) => file.status === "pending");
     if (pendingFiles.length === 0) return;
@@ -172,15 +178,8 @@ export function useBatchUpload(language: LanguageCode) {
 
     try {
       const paperIds = uploaded.map((file) => file.paper!.id);
-      const beforeStartQueue = await getQueueStatus().catch(() => null);
-      if (beforeStartQueue) {
-        setQueueStatus(beforeStartQueue);
-      }
       const batchResult = await startBatchAnalysis(paperIds);
-      const afterStartQueue = await getQueueStatus().catch(() => null);
-      if (afterStartQueue) {
-        setQueueStatus(afterStartQueue);
-      }
+      refreshQueueStatus();
 
       setFiles((prev) =>
         prev.map((item) => {
@@ -189,55 +188,35 @@ export function useBatchUpload(language: LanguageCode) {
         }),
       );
 
-      const completedRuns = await Promise.all(
-        batchResult.runs.map(async (run) => {
-          try {
-            const terminalRun = await pollRunUntilTerminal(
-              run.id,
-              {
-                onRun: (latestRun) => {
-                  if (abortController.signal.aborted) return;
-                  setFiles((prev) =>
-                    prev.map((item) =>
-                      item.run?.id === latestRun.id ? { ...item, run: latestRun } : item,
-                    ),
-                  );
-                },
-              },
-              { signal: abortController.signal, delayFirstPoll: true, language },
-            );
-            setFiles((prev) =>
-              prev.map((item) =>
-                item.run?.id === terminalRun.id
-                  ? { ...item, run: terminalRun, status: terminalRun.status === "completed" ? "completed" : "failed" }
-                  : item,
-              ),
-            );
-            return terminalRun.status === "completed";
-          } catch (error) {
-            if (abortController.signal.aborted) throw error;
-            const errorMessage = error instanceof Error ? error.message : text(language, "networkInterrupted");
-            setFiles((prev) =>
-              prev.map((item) =>
-                item.run?.id === run.id ? { ...item, status: "failed" as const, error: errorMessage } : item,
-              ),
-            );
-            return false;
-          }
-        }),
+      const terminalBatch = await pollBatchUntilTerminal(
+        batchResult.batch_id,
+        {
+          onBatch: (batch) => {
+            if (abortController.signal.aborted) return;
+            setFiles((prev) => mergeBatchRuns(prev, batch.runs));
+          },
+          onRetry: (consecutiveErrors) => {
+            if (abortController.signal.aborted) return;
+            setMessage(`${text(language, "retrying")} (${consecutiveErrors}/5)...`);
+          },
+        },
+        { signal: abortController.signal, delayFirstPoll: true, language },
       );
 
-      setMessage(batchCompletionMessage(completedRuns, language));
+      setMessage(
+        batchCompletionMessage(
+          terminalBatch.runs.map((run) => run.status === "completed"),
+          language,
+        ),
+      );
+      window.dispatchEvent(new Event("paper2repo:runs-updated"));
     } catch (error) {
       if (abortController.signal.aborted) return;
       if (error instanceof ApiError && error.status === 503) {
         const waitSeconds = error.retryAfterSeconds ?? queueStatus?.retry_after_seconds ?? 5;
         setQueueRetryAvailable(true);
         setMessage(`${text(language, "queueFullRetry")} ${language === "en" ? "Retry after" : "建议等待"} ${waitSeconds}s.`);
-        const latestQueue = await getQueueStatus().catch(() => null);
-        if (latestQueue) {
-          setQueueStatus(latestQueue);
-        }
+        refreshQueueStatus();
         return;
       }
       setMessage(error instanceof Error ? error.message : text(language, "backendOffline"));
@@ -282,4 +261,19 @@ export function useBatchUpload(language: LanguageCode) {
     uploadingCount,
     validateAndAddFiles,
   };
+}
+
+function mergeBatchRuns(files: BatchFile[], runs: readonly Run[]): BatchFile[] {
+  const runsById = new Map(runs.map((run) => [run.id, run]));
+  return files.map((item) => {
+    const run = item.run ? runsById.get(item.run.id) : undefined;
+    if (!run) return item;
+    if (run.status === "completed") {
+      return { ...item, run, status: "completed", error: null };
+    }
+    if (run.status === "failed") {
+      return { ...item, run, status: "failed", error: run.error_message };
+    }
+    return { ...item, run, status: "analyzing", error: null };
+  });
 }

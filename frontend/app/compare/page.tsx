@@ -155,12 +155,12 @@ function ComparisonTable({
             <CompareRow label={text(language, "compareVenue")} values={results.map((r) => [r.metadata.venue, r.metadata.year].filter(Boolean).join(" ") || "-")} />
             <CompareRow label={text(language, "compareProblem")} values={results.map((r) => r.understanding.core_problem || "-")} />
             <CompareRow label={text(language, "compareContributions")} values={results.map((r) => r.understanding.main_contributions?.join("; ") || "-")} />
-            <CompareRow label={text(language, "compareMethod")} values={results.map((r) => r.method.method_name || "-")} />
-            <CompareRow label={text(language, "compareInnovations")} values={results.map((r) => r.method.key_innovations?.join("; ") || "-")} />
+            <CompareRow label={text(language, "compareMethod")} values={results.map((r) => r.method.method_summary || r.method.module_names.join("; ") || "-")} />
+            <CompareRow label={text(language, "compareInnovations")} values={results.map((r) => r.method.key_formulas.join("; ") || r.method.system_framework || "-")} />
             <CompareRow label={text(language, "compareDatasets")} values={results.map((r) => r.experiments.datasets?.join(", ") || "-")} />
             <CompareRow label={text(language, "compareMetrics")} values={results.map((r) => r.experiments.metrics?.join(", ") || "-")} />
             <CompareRow label={text(language, "compareGoal")} values={results.map((r) => r.reproduction.reproduction_goal || "-")} />
-            <CompareRow label={text(language, "compareEffort")} values={results.map((r) => r.reproduction.estimated_effort || "-")} />
+            <CompareRow label={text(language, "compareEffort")} values={results.map((r) => r.reproduction.full_reproduction_difficulty || "-")} />
           </tbody>
         </table>
       </div>

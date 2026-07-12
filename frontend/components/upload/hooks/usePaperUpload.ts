@@ -172,17 +172,10 @@ export function usePaperUpload(language: LanguageCode) {
     setQueueRetryAvailable(false);
     setMessage(text(language, "analysisStarting"));
     try {
-      const beforeStartQueue = await getQueueStatus().catch(() => null);
-      if (beforeStartQueue) {
-        setQueueStatus(beforeStartQueue);
-      }
       const startedRun = await startAnalysis(paper.id);
       setRun(startedRun);
       setMessage(startedRun.current_step === "queued" ? text(language, "queuedWaiting") : text(language, "analysisQueued"));
-      const afterStartQueue = await getQueueStatus().catch(() => null);
-      if (afterStartQueue) {
-        setQueueStatus(afterStartQueue);
-      }
+      refreshQueueStatus();
 
       const terminalRun = await pollRunUntilTerminal(
         startedRun.id,
@@ -220,10 +213,7 @@ export function usePaperUpload(language: LanguageCode) {
         const waitSeconds = error.retryAfterSeconds ?? queueStatus?.retry_after_seconds ?? 5;
         setQueueRetryAvailable(true);
         setMessage(`${text(language, "queueFullRetry")} ${language === "en" ? "Retry after" : "建议等待"} ${waitSeconds}s.`);
-        const latestQueue = await getQueueStatus().catch(() => null);
-        if (latestQueue) {
-          setQueueStatus(latestQueue);
-        }
+        refreshQueueStatus();
         return;
       }
       setMessage(error instanceof Error ? error.message : text(language, "backendOffline"));
@@ -233,6 +223,12 @@ export function usePaperUpload(language: LanguageCode) {
         setIsAnalyzing(false);
       }
     }
+  }
+
+  function refreshQueueStatus() {
+    void getQueueStatus()
+      .then(setQueueStatus)
+      .catch(() => undefined);
   }
 
   return {

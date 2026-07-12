@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import stat
 import threading
 from collections.abc import Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
+
+from pydantic import ValidationError
 
 from app.agents.graph import run_analysis
 from app.core.config import get_settings
@@ -14,13 +18,16 @@ from app.core.database import (
     claim_analysis_job,
     complete_analysis_job,
     fail_analysis_job,
+    get_analysis_result,
     get_paper,
+    get_report,
     get_run,
     is_analysis_cancel_requested,
     list_recoverable_analysis_jobs,
     renew_analysis_job_lease,
     update_run_status,
 )
+from app.schemas.report import PersistResult
 from app.services.usage_tracking import track_llm_usage
 
 logger = logging.getLogger(__name__)
@@ -42,6 +49,10 @@ class AnalysisRunRequest:
 
 
 class AnalysisQueueFullError(RuntimeError):
+    pass
+
+
+class IncompleteAnalysisArtifactsError(RuntimeError):
     pass
 
 
@@ -179,7 +190,7 @@ def run_analysis_background(paper_id: str, run_id: str, pdf_path: str, model_nam
                 return
             update_run_status(run_id, "running", current_step="queued", progress_percent=0)
             with track_llm_usage(run_id):
-                run_analysis(
+                final_state = run_analysis(
                     paper_id=paper_id,
                     run_id=run_id,
                     pdf_path=pdf_path,
@@ -188,6 +199,7 @@ def run_analysis_background(paper_id: str, run_id: str, pdf_path: str, model_nam
                 )
             if is_analysis_cancel_requested(run_id):
                 raise RuntimeError("Analysis canceled.")
+            _validate_completed_artifacts(final_state, paper_id=paper_id, run_id=run_id)
             update_run_status(
                 run_id,
                 "completed",
@@ -227,6 +239,48 @@ def run_analysis_background(paper_id: str, run_id: str, pdf_path: str, model_nam
             except Exception:
                 logger.exception("Failed to update run status after error for run %s", run_id)
                 return
+
+
+def _validate_completed_artifacts(final_state: Any, *, paper_id: str, run_id: str) -> None:
+    if not isinstance(final_state, dict):
+        raise IncompleteAnalysisArtifactsError("Analysis did not return a final state with PersistResult.")
+
+    try:
+        persist_result = PersistResult.model_validate(final_state.get("persist_result"))
+    except ValidationError as exc:
+        raise IncompleteAnalysisArtifactsError("Analysis did not return a valid PersistResult.") from exc
+
+    if (
+        persist_result.paper_id != paper_id
+        or persist_result.run_id != run_id
+        or persist_result.status != "completed"
+        or not persist_result.report_path
+    ):
+        raise IncompleteAnalysisArtifactsError("PersistResult does not match the completed analysis run.")
+
+    analysis = get_analysis_result(run_id)
+    if not analysis or analysis.get("paper_id") != paper_id:
+        raise IncompleteAnalysisArtifactsError("Completed analysis result row is missing or mismatched.")
+
+    report = get_report(run_id)
+    if not report or report.get("paper_id") != paper_id:
+        raise IncompleteAnalysisArtifactsError("Completed report row is missing or mismatched.")
+    report_content = report.get("content")
+    report_path_value = report.get("file_path")
+    if not isinstance(report_content, str) or not report_content.strip() or not report_path_value:
+        raise IncompleteAnalysisArtifactsError("Completed report row is empty.")
+
+    persisted_path = Path(persist_result.report_path).expanduser().resolve()
+    report_path = Path(str(report_path_value)).expanduser().resolve()
+    if persisted_path != report_path:
+        raise IncompleteAnalysisArtifactsError("PersistResult report path does not match the stored report row.")
+
+    try:
+        report_stat = report_path.stat()
+    except OSError as exc:
+        raise IncompleteAnalysisArtifactsError("Completed report file is missing.") from exc
+    if report_path.is_symlink() or not stat.S_ISREG(report_stat.st_mode) or report_stat.st_size <= 0:
+        raise IncompleteAnalysisArtifactsError("Completed report file is not a nonempty regular file.")
 
 
 def start_recoverable_analysis_jobs() -> int:

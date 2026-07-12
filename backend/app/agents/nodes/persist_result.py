@@ -6,8 +6,8 @@ from pydantic import BaseModel
 from app.agents.state import PaperAnalysisState
 from app.core.config import get_settings
 from app.core.database import (
-    create_citations,
     replace_chunks,
+    replace_citations,
     save_analysis_result,
     save_report,
     update_paper_title,
@@ -50,16 +50,17 @@ def persist_result_node(state: PaperAnalysisState) -> PaperAnalysisState:
         if isinstance(value, BaseModel):
             analysis_data[key] = value.model_dump()
 
-    if analysis_data:
-        save_analysis_result(run_id, paper_id, analysis_data)
+    # Always persist the structured-result row. A partial report may contain no
+    # successful optional analysis nodes, but completed runs still need a
+    # stable /analysis resource whose nullable fields describe that outcome.
+    save_analysis_result(run_id, paper_id, analysis_data)
 
     title = report.title if report.title else "Analysis Report"
     save_report(run_id, paper_id, title, report.content, report_path)
 
-    citations = state.get("citations")
-    if citations:
-        citation_dicts = [c.model_dump() for c in citations]
-        create_citations(run_id, paper_id, citation_dicts)
+    citations = state.get("citations") or []
+    citation_dicts = [citation.model_dump() for citation in citations]
+    replace_citations(run_id, paper_id, citation_dicts)
 
     persist_result = PersistResult(
         paper_id=paper_id,

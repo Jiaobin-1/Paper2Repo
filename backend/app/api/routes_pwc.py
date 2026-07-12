@@ -34,7 +34,7 @@ def get_pwc_links(run_id: str) -> dict[str, Any]:
     understanding = analysis.get("understanding_json") if analysis else {}
 
     keywords = metadata.get("keywords", []) if metadata else []
-    method_name = method.get("method_name", "") if method else ""
+    method_name = _primary_method_name(method)
     contributions = understanding.get("main_contributions", []) if understanding else []
 
     links: list[dict[str, str]] = []
@@ -76,3 +76,18 @@ def get_pwc_links(run_id: str) -> dict[str, Any]:
 def _pwc_search_url(query: str) -> str:
     encoded = urllib.parse.quote(query)
     return f"https://paperswithcode.com/search?q={encoded}"
+
+
+def _primary_method_name(method: dict[str, Any] | None) -> str:
+    if not method:
+        return ""
+    modules = method.get("modules")
+    if isinstance(modules, list):
+        for module in modules:
+            if not isinstance(module, dict):
+                continue
+            name = module.get("module_name") or module.get("name")
+            if isinstance(name, str) and name.strip():
+                return name.strip()
+    legacy_name = method.get("method_name")
+    return legacy_name.strip() if isinstance(legacy_name, str) else ""

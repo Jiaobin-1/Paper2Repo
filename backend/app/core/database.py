@@ -9,12 +9,13 @@ from app.repositories.analysis_jobs import (
     renew_analysis_job_lease,
     request_analysis_cancel,
 )
-from app.repositories.citations import create_citations, get_citations_for_run
+from app.repositories.citations import create_citations, get_citations_for_run, replace_citations
 from app.repositories.connection import _json, get_connection, utc_now
 from app.repositories.knowledge import (
     delete_embeddings,
     get_all_embeddings,
     get_paper_chunks,
+    get_paper_embeddings,
     replace_chunks,
     save_embeddings,
 )
@@ -92,6 +93,7 @@ __all__ = [
     "get_default_model",
     "get_llm_usage_summary",
     "get_paper",
+    "get_paper_embeddings",
     "get_paper_chunks",
     "get_paper_storage_paths",
     "get_qa_history",
@@ -110,6 +112,7 @@ __all__ = [
     "recover_stale_runs",
     "renew_analysis_job_lease",
     "replace_chunks",
+    "replace_citations",
     "request_analysis_cancel",
     "save_analysis_result",
     "save_embeddings",

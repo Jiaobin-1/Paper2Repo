@@ -16,8 +16,25 @@ from app.core.database import (
     get_run,
     init_db,
     request_analysis_cancel,
+    save_analysis_result,
+    save_report,
 )
 from app.services import analysis_runner
+
+
+def _persist_fake_artifacts(*, paper_id: str, run_id: str, report_dir) -> dict[str, object]:
+    report_path = report_dir / f"{run_id}.md"
+    report_path.write_text("# Test report\n", encoding="utf-8")
+    save_analysis_result(run_id, paper_id, {})
+    save_report(run_id, paper_id, "Test report", "# Test report\n", report_path)
+    return {
+        "persist_result": {
+            "paper_id": paper_id,
+            "run_id": run_id,
+            "status": "completed",
+            "report_path": str(report_path),
+        }
+    }
 
 
 def test_run_analysis_background_marks_completed(isolated_settings, monkeypatch):
@@ -30,6 +47,9 @@ def test_run_analysis_background_marks_completed(isolated_settings, monkeypatch)
 
     def fake_run_analysis(**kwargs):
         kwargs["progress_callback"]("persist_result_node", 100)
+        return _persist_fake_artifacts(
+            paper_id=kwargs["paper_id"], run_id=kwargs["run_id"], report_dir=isolated_settings,
+        )
 
     monkeypatch.setattr(analysis_runner, "run_analysis", fake_run_analysis)
 
@@ -41,6 +61,22 @@ def test_run_analysis_background_marks_completed(isolated_settings, monkeypatch)
     assert updated_run["progress_percent"] == 100
     assert updated_run["completed_at"]
     assert get_analysis_job(run["id"])["status"] == "completed"
+
+
+def test_run_analysis_background_rejects_missing_persisted_artifacts(isolated_settings, monkeypatch):
+    init_db()
+    pdf_path = isolated_settings / "paper.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4\n%%EOF")
+    paper = create_paper("paper.pdf", pdf_path, pdf_path.stat().st_size)
+    run = create_run(paper["id"])
+    create_analysis_job(run["id"], paper["id"], max_attempts=1)
+    monkeypatch.setattr(analysis_runner, "run_analysis", lambda **_kwargs: {})
+
+    analysis_runner.run_analysis_background(paper["id"], run["id"], str(pdf_path), "test-model")
+
+    updated_run = get_run(run["id"])
+    assert updated_run["status"] == "failed"
+    assert "PersistResult" in updated_run["error_message"]
 
 
 def test_run_analysis_background_retries_transient_failure(isolated_settings, monkeypatch):
@@ -58,6 +94,9 @@ def test_run_analysis_background_retries_transient_failure(isolated_settings, mo
         if calls == 1:
             raise RuntimeError("temporary")
         kwargs["progress_callback"]("persist_result_node", 100)
+        return _persist_fake_artifacts(
+            paper_id=kwargs["paper_id"], run_id=kwargs["run_id"], report_dir=isolated_settings,
+        )
 
     monkeypatch.setattr(analysis_runner, "run_analysis", fake_run_analysis)
 
@@ -270,6 +309,9 @@ def test_expired_job_is_recovered_after_interrupted_worker(isolated_settings, mo
 
     def fake_run_analysis(**kwargs):
         kwargs["progress_callback"]("persist_result_node", 99)
+        return _persist_fake_artifacts(
+            paper_id=kwargs["paper_id"], run_id=kwargs["run_id"], report_dir=isolated_settings,
+        )
 
     monkeypatch.setattr(analysis_runner, "run_analysis", fake_run_analysis)
 

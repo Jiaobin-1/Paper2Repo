@@ -37,3 +37,16 @@ def test_latex_export_cannot_close_verbatim_block_from_report_content() -> None:
 
     assert latex.splitlines().count(r"\end{Verbatim}") == 1
     assert r"\\end{Verbatim}" in latex
+
+
+def test_latex_export_emits_balanced_longtable_for_uneven_rows() -> None:
+    latex = build_report_latex(
+        "Report",
+        "| Metric | Value | Notes |\n| --- | --- | --- |\n| Accuracy | 0.91 |\n| F1 | 0.88 | held-out |",
+    )
+
+    assert r"\begin{longtable}{|l|l|l|}" in latex
+    assert r"Accuracy & 0.91 &  \\" in latex
+    assert latex.count(r"\begin{longtable}") == 1
+    assert latex.count(r"\end{longtable}") == 1
+    assert r"\end{{longtable}}" not in latex

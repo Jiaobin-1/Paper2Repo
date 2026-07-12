@@ -1,6 +1,12 @@
 from __future__ import annotations
 
-from app.core.database import create_paper, init_db, replace_chunks, save_embeddings
+from app.core.database import (
+    create_paper,
+    get_paper_embeddings,
+    init_db,
+    replace_chunks,
+    save_embeddings,
+)
 from app.schemas.chunks import ChunkMetadata, PaperChunk
 from app.services import retrieval
 from app.services.retrieval import new_embedding_cache, retrieve_context, search_knowledge_base
@@ -40,12 +46,23 @@ class TestKeywordFallback:
         results = retrieve_context(chunks, query="xyznonexistent", keywords=["abc"])
         assert results == []
 
+    def test_matches_chinese_query_without_embeddings(self, monkeypatch):
+        monkeypatch.setattr(retrieval, "_HAS_EMBEDDINGS", False)
+        chunks = [
+            _make_chunk(0, "本文提出一种注意力机制用于文档分类。"),
+            _make_chunk(1, "This section discusses unrelated preprocessing."),
+        ]
+
+        results = retrieve_context(chunks, query="注意力机制")
+
+        assert results[0].metadata.chunk_index == 0
+
 
 class TestVectorRetrieval:
     def test_blends_scores_when_embeddings_available(self, monkeypatch):
         monkeypatch.setattr(retrieval, "_HAS_EMBEDDINGS", True)
 
-        def fake_embedding_scores(query, chunks):
+        def fake_embedding_scores(query, chunks, cache=None):
             return [0.9, 0.1]
 
         monkeypatch.setattr(retrieval, "_embedding_scores", fake_embedding_scores)
@@ -56,10 +73,22 @@ class TestVectorRetrieval:
         results = retrieve_context(chunks, query="deep learning NLP")
         assert len(results) >= 1
 
+    def test_semantic_only_chunk_can_enter_results_with_noncontiguous_indices(self, monkeypatch):
+        monkeypatch.setattr(retrieval, "_HAS_EMBEDDINGS", True)
+        monkeypatch.setattr(retrieval, "_embedding_scores", lambda query, chunks, cache=None: [0.1, 0.9])
+        chunks = [
+            _make_chunk(10, "Unrelated lexical text."),
+            _make_chunk(42, "Semantically relevant content without query tokens."),
+        ]
+
+        results = retrieve_context(chunks, query="attention", top_k=1)
+
+        assert results[0].metadata.chunk_index == 42
+
     def test_graceful_fallback_on_embedding_error(self, monkeypatch):
         monkeypatch.setattr(retrieval, "_HAS_EMBEDDINGS", True)
 
-        def failing_scores(query, chunks):
+        def failing_scores(query, chunks, cache=None):
             raise RuntimeError("model load failed")
 
         monkeypatch.setattr(retrieval, "_embedding_scores", failing_scores)
@@ -113,3 +142,15 @@ class TestVectorRetrieval:
 
         assert results[0].paper_id == paper_b["id"]
         assert results[0].paper_title == "Paper B"
+
+    def test_replace_chunks_clears_stale_embeddings(self, isolated_settings):
+        init_db()
+        pdf_path = isolated_settings / "paper.pdf"
+        pdf_path.write_bytes(b"%PDF-1.4\n%%EOF")
+        paper = create_paper("paper.pdf", pdf_path, pdf_path.stat().st_size)
+        replace_chunks(paper["id"], [_make_chunk(0, "First version").model_dump()])
+        save_embeddings(paper["id"], [(0, b"old-vector")])
+
+        replace_chunks(paper["id"], [_make_chunk(0, "Second version").model_dump()])
+
+        assert get_paper_embeddings(paper["id"]) == []

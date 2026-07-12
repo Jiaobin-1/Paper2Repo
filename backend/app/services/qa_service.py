@@ -13,7 +13,7 @@ from app.core.database import (
 )
 from app.schemas.chunks import ChunkMetadata, PaperChunk
 from app.services.llm_client import LLMClient
-from app.services.retrieval import retrieve_context
+from app.services.retrieval import load_stored_embedding_cache, retrieve_context
 from app.services.usage_tracking import track_llm_usage
 
 logger = logging.getLogger(__name__)
@@ -75,7 +75,13 @@ def build_qa_context(
     chunk_rows = get_paper_chunks(paper_id)
     chunks = _chunks_from_rows(chunk_rows)
 
-    retrieved = retrieve_context(chunks, query=question, top_k=top_k)
+    embedding_cache = load_stored_embedding_cache(paper_id, chunks)
+    retrieved = retrieve_context(
+        chunks,
+        query=question,
+        top_k=top_k,
+        embedding_cache=embedding_cache,
+    )
     context = context_block(retrieved, max_chars=max_context_chars)
 
     system_prompt = (
@@ -148,10 +154,6 @@ def answer_question(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     user_msg = save_qa_message(run_id, paper_id, "user", question)
 
-    history = get_qa_history(run_id)
-
-    system_prompt, _chunks = build_qa_context(run_id, paper_id, question)
-
     client = LLMClient(model_name=model_name)
     if not client.is_configured():
         fallback = (
@@ -161,6 +163,9 @@ def answer_question(
         )
         assistant_msg = save_qa_message(run_id, paper_id, "assistant", fallback)
         return user_msg, assistant_msg
+
+    history = get_qa_history(run_id)
+    system_prompt, _chunks = build_qa_context(run_id, paper_id, question)
 
     system_header = QA_SYSTEM_PROMPT_ZH if language == "zh" else QA_SYSTEM_PROMPT_EN
     full_system = f"{system_header}\n\n{system_prompt}"
